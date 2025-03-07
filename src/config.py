@@ -54,13 +54,20 @@ prompts =      _config.get("prompts", {})
 model_config = _config.get("model", {})
 quality =      _config.get("quality", {})
 
-# Prompt settings.
+# generate_mcqs prompts
 system_message     = prompts.get("system_message", "")
 user_message       = prompts.get("user_message", "")
 system_message_2   = prompts.get("system_message_2", "")
 user_message_2     = prompts.get("user_message_2", "")
 system_message_3   = prompts.get("system_message_3", "")
 user_message_3     = prompts.get("user_message_3", "")
+
+# score_answers prompts
+scoring_prompts      = _config.get("scoring_prompts", {})
+score_main_system    = scoring_prompts.get("main_system", "")
+score_main_prompt    = scoring_prompts.get("main_prompt", "")
+score_fallback_system = scoring_prompts.get("fallback_system", "")
+score_fallback_prompt = scoring_prompts.get("fallback_prompt", "")
 
 # Model config
 defaultModel = model_config.get("name", "alcf:mistralai/Mistral-7B-Instruct-v0.3")
@@ -78,4 +85,3 @@ papers_dir  = directories.get("papers", "_PAPERS")
 json_dir    = directories.get("json", "_JSON")
 mcq_dir     = directories.get("mcq", "_MCQ")
 results_dir = directories.get("results", "_RESULTS")
-
