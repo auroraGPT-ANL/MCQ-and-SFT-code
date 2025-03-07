@@ -5,8 +5,6 @@ import json
 import os
 import statistics
 import requests
-#import openai
-#from openai import OpenAI, APITimeoutError
 import time
 import glob
 import argparse
@@ -23,67 +21,63 @@ def score_answer(index, model, question: str, reference_answer: str, user_answer
     Returns a numeric score (float) from 1 to 10.
     """
 
-    # print(f'\n=========== SCORE ANSWER {index} ===================\n\n-------- QUESTION -----\n{question}\n------ USER ANSWER\n{user_answer}\n ====================\n\n')
+    # Build the main scoring prompt from config
+    eval_prompt = config.score_main_prompt.format(
+        question=question,
+        reference_answer=reference_answer,
+        user_answer=user_answer
+    )
+    system_msg = config.score_main_system
 
-    # We ask the model to strictly return a single number from 1 to 10
-    # indicating how well the user_answer matches the reference_answer.
-    eval_prompt = f"""
-You are a strict grader. 
+    # Call the model with the main prompt
+    response = model.run(
+        user_prompt=eval_prompt,
+        system_prompt=system_msg,
+        temperature=0.0
+    )
 
-Question: {question}
-Reference Answer: {reference_answer}
-User's Answer: {user_answer}
-
-On a scale of 1 to 10 (10 = exactly matches the reference answer, 
-1 = completely incorrect), provide ONLY the numeric score that reflects
-how well the User's Answer matches the Reference Answer. Provide just a number. No extra text. No explanation. No formatting.
-"""
-
-    response = model.run( user_prompt=eval_prompt,
-                          system_prompt="You are a strict grader. Respond with only the number.",
-                          temperature  = 0.0 )
-
-### We may want to return 0.0 above to be consistent with below
-
-    # Extract the numeric score from the assistant's response
+    # Attempt to parse the response as a float
     try:
         score = float(response)
     except ValueError:
-        score = try_again_to_extract_score(user_answer)
-        # If the model didn't return a pure number, attempt a fallback or default to 0
-        #print(f'Score of 0 for bad response++++\n{response}\n+++++++++\n')
-        #print(f'\n\n----------\n{eval_prompt}\n\n==================')
-        #score = 0.0
-    
+        # If that fails, try the fallback prompt
+        score = try_again_to_extract_score(model, user_answer)
+
     return score
 
 
-def try_again_to_extract_score(user_answer):
+def try_again_to_extract_score(model, user_answer: str) -> float:
+    """
+    Attempts to parse out a final numeric answer using the fallback prompt.
+    If that fails, returns 0.0
+    """
+    fallback_prompt_text = config.score_fallback_prompt.format(user_answer=user_answer)
+    fallback_system_text = config.score_fallback_system
+
     try:
-        prompt = f"Extract a final answer from this user response. Sometimes this appears at the end after the words '**Final Answer**', enclosed in the characters '\\[ \\boxed{' and '} \\]'. For example, '\\[ \\boxed{3} \\]' for the answer '3'.\n\nHere is the user response:\n{user_answer}"
-        response = model.run( user_prompt=prompt,
-                             system_prompt="Extract a single number",
-                             temperature  = 0.0 )
+        response = model.run(
+            user_prompt=fallback_prompt_text,
+            system_prompt=fallback_system_text,
+            temperature=0.0
+        )
         score = float(response)
     except:
-        config.logger.info(f'Score of 0 for bad response++++\n{user_answer}\n+++++++++\n')
+        config.logger.info(f"Score of 0 for bad response++++\n{user_answer}\n+++++++++\n")
         score = 0.0
 
     return score
 
 
-
 def main():
-    parser = argparse.ArgumentParser(description='Program to use LLM B to rate answers provided previously by LLM A') 
+    parser = argparse.ArgumentParser(description='Program to use LLM B to rate answers provided previously by LLM A')
     parser.add_argument('-a','--modelA_name', help='modelA name', required=True)
     parser.add_argument('-b','--modelB_name', help='modelB name', required=True)
     parser.add_argument('-o','--output', help='Output directory', required=True)
-    parser.add_argument('-f','--force',  help='Process even if score file exists',
-                        action="store_true")
+    parser.add_argument('-f','--force',  help='Process even if score file exists', action="store_true")
     parser.add_argument('-c', "--cache-dir", type=str,
                         default=os.getenv("HF_HOME"),
                         help="Custom cache directory for Hugging Face")
-    parser.add_argument('-q','--quiet',   action='store_true',   
+    parser.add_argument('-q','--quiet',   action='store_true',
                         help='No progress bar or messages')
     parser.add_argument('-v','--verbose', action='store_true',
                         help='Enable verbose logging')
@@ -97,10 +91,9 @@ def main():
     elif args.quiet:
         config.logger.setLevel(logging.CRITICAL)
         use_progress_bar = False
-    else:  # default case
+    else:
         config.logger.setLevel(logging.WARNING)
         use_progress_bar = True
-
 
     # Set HF_HOME if using custom cache directory
     if args.cache_dir:
@@ -114,18 +107,21 @@ def main():
     modelB      = Model(modelB_name)
 
     # Load previously generated answers from modelA
-    answer_file = output_dir+'/answers_'+modelA_name.replace('/', '+')+'.json'
+    answer_file = os.path.join(output_dir, 'answers_' + modelA_name.replace('/', '+') + '.json')
     config.logger.info(f'Looking for {answer_file}')
     if not os.path.exists(answer_file):
         config.logger.error(f'No answers file for {modelA_name}')
-        exit(1)
+        sys.exit(1)
 
-    score_file = f'{output_dir}/scores_{modelA_name.replace("/","+")}={modelB_name.replace("/","+")}.json'
+    score_file = os.path.join(
+        output_dir,
+        f'scores_{modelA_name.replace("/","+")}={modelB_name.replace("/","+")}.json'
+    )
     if os.path.exists(score_file) and not args.force:
         config.logger.error(f"Score file already exists: {score_file}")
-        exit(1)
+        sys.exit(1)
 
-    out_f = open(score_file, 'w', encoding='utf-8') 
+    out_f = open(score_file, 'w', encoding='utf-8')
 
     # Load question-answer pairs
     with open(answer_file, "r", encoding="utf-8") as f:
@@ -156,41 +152,57 @@ def main():
 
         if not question or not reference_answer or not model_answer:
             config.logger.error('Bad item:')
-            config.logger.error('Question ', question)
-            config.logger.error('Reference', reference_answer)
-            config.logger.error('Model    ', model_answer)
-            exit(1)
-            continue  # skip malformed items
+            config.logger.error(f'Question: {question}')
+            config.logger.error(f'Reference: {reference_answer}')
+            config.logger.error(f'Model: {model_answer}')
+            sys.exit(1)
 
-        # Use model to evaluate/grade the generated answer in file
-        # against the reference answer
+        # Use modelB to evaluate/grade the generated answer
         eval_answer_start_time = time.time()
         score = score_answer(index, modelB, question, reference_answer, model_answer)
         eval_answer_time = time.time() - eval_answer_start_time
         eval_answer_total_time += eval_answer_time
-        if score != None:
+
+        if score is not None:
             scores.append(score)
-            qa_pairs.append({'modelA': modelA_name, 'modelB': modelB_name, 'index': index, 'question': question, 'reference':reference_answer, 'model':model_answer, 'score':score, 'gen_time': gen_time, 'eval_time': f'{eval_answer_time:.4f}', 'file':file, 'filenum':filenum, 'chunknum':chunknum})
+            qa_pairs.append({
+                'modelA': modelA_name,
+                'modelB': modelB_name,
+                'index': index,
+                'question': question,
+                'reference': reference_answer,
+                'model': model_answer,
+                'score': score,
+                'gen_time': gen_time,
+                'eval_time': f'{eval_answer_time:.4f}',
+                'file': file,
+                'filenum': filenum,
+                'chunknum': chunknum
+            })
 
         total_time += time.time() - start_time
         start_time = time.time()
-        if index%10==0:
-            avg_time = total_time / index  # Average time per item so far
-            avg_eval_time = eval_answer_total_time / index  # Average time per item so far
-            config.logger.info(f'{index} ({avg_time:.2f})', end =' ', flush=True) 
+
+        if index % 10 == 0:
+            avg_time = total_time / index
+            avg_eval_time = eval_answer_total_time / index
+            config.logger.info(f'{index} (avg_time={avg_time:.2f}s, eval_time={avg_eval_time:.2f}s)', end=' ', flush=True)
+
         pbar.update(1)
-    
-    config.logger.info()
+
+    config.logger.info("")  # Just to flush a newline
 
     json.dump(qa_pairs, out_f, ensure_ascii=False, indent=2)
-
     pbar.close()
 
     if scores:
         mean_score = statistics.mean(scores)
-        variance_score = statistics.pvariance(scores)  # population variance
+        variance_score = statistics.pvariance(scores)
+        config.logger.info(f"Scores computed: mean={mean_score:.2f}, variance={variance_score:.2f}")
     else:
         config.logger.warning("No valid QA pairs found or no scores computed.")
+
+    out_f.close()
 
 
 if __name__ == "__main__":
