@@ -9,11 +9,13 @@ import requests
 #from openai import OpenAI, APITimeoutError
 import time
 import glob
+import argparse
+from tqdm import tqdm
+import logging
+import config
 
 from model_access import Model
 
-
-# ---------------------------------------------------------------------
 
 def score_answer(index, model, question: str, reference_answer: str, user_answer: str) -> float:
     """
@@ -64,7 +66,7 @@ def try_again_to_extract_score(user_answer):
                              temperature  = 0.0 )
         score = float(response)
     except:
-        print(f'Score of 0 for bad response++++\n{user_answer}\n+++++++++\n')
+        config.logger.info(f'Score of 0 for bad response++++\n{user_answer}\n+++++++++\n')
         score = 0.0
 
     return score
@@ -72,19 +74,38 @@ def try_again_to_extract_score(user_answer):
 
 
 def main():
-    import argparse
     parser = argparse.ArgumentParser(description='Program to use LLM B to rate answers provided previously by LLM A') 
     parser.add_argument('-a','--modelA_name', help='modelA name', required=True)
     parser.add_argument('-b','--modelB_name', help='modelB name', required=True)
     parser.add_argument('-o','--output', help='Output directory', required=True)
-    parser.add_argument('-f','--force',  help='Process even if score file exists', action="store_true")
-    parser.add_argument('-c', "--cache-dir", type=str, default=os.getenv("HF_HOME"), help="Custom cache directory for Hugging Face")
+    parser.add_argument('-f','--force',  help='Process even if score file exists',
+                        action="store_true")
+    parser.add_argument('-c', "--cache-dir", type=str,
+                        default=os.getenv("HF_HOME"),
+                        help="Custom cache directory for Hugging Face")
+    parser.add_argument('-q','--quiet',   action='store_true',   
+                        help='No progress bar or messages')
+    parser.add_argument('-v','--verbose', action='store_true',
+                        help='Enable verbose logging')
+
     args = parser.parse_args()
+
+    # Decide logging level and whether to show a progress bar
+    if args.verbose:
+        config.logger.setLevel(logging.INFO)
+        use_progress_bar = False
+    elif args.quiet:
+        config.logger.setLevel(logging.CRITICAL)
+        use_progress_bar = False
+    else:  # default case
+        config.logger.setLevel(logging.WARNING)
+        use_progress_bar = True
+
 
     # Set HF_HOME if using custom cache directory
     if args.cache_dir:
         os.environ["HF_HOME"] = args.cache_dir
-        print(f"Using Hugging Face cache directory: {args.cache_dir}")
+        config.logger.info(f"Using Hugging Face cache directory: {args.cache_dir}")
 
     output_dir   = args.output
 
@@ -94,14 +115,14 @@ def main():
 
     # Load previously generated answers from modelA
     answer_file = output_dir+'/answers_'+modelA_name.replace('/', '+')+'.json'
-    print(f'Looking for {answer_file}')
+    config.logger.info(f'Looking for {answer_file}')
     if not os.path.exists(answer_file):
-        print(f'No answers file for {modelA_name}')
+        config.logger.error(f'No answers file for {modelA_name}')
         exit(1)
 
     score_file = f'{output_dir}/scores_{modelA_name.replace("/","+")}={modelB_name.replace("/","+")}.json'
     if os.path.exists(score_file) and not args.force:
-        print('Score file already exists:', score_file)
+        config.logger.error(f"Score file already exists: {score_file}")
         exit(1)
 
     out_f = open(score_file, 'w', encoding='utf-8') 
@@ -113,11 +134,17 @@ def main():
     scores   = []
     qa_pairs = []
 
+    # Create progress bar if not in --quiet or --verbose mode.
+    if use_progress_bar:
+        pbar = tqdm(total=len(data), desc="Processing", unit="item")
+    else:
+        pbar = config.NoOpTqdm(total=len(data))
+
     start_time = time.time()
     total_time = 0
     eval_answer_total_time = 0
 
-    print(f'Processing {len(data)} QA pairs')
+    config.logger.info(f'Processing {len(data)} QA pairs')
     for (qa_pair, index) in zip(data, range(1, len(data) + 1)):
         question         = qa_pair.get("question", "")
         reference_answer = qa_pair.get("reference", "")
@@ -128,10 +155,10 @@ def main():
         chunknum         = qa_pair.get("chunknum", "")
 
         if not question or not reference_answer or not model_answer:
-            print('Bad item:')
-            print('Question ', question)
-            print('Reference', reference_answer)
-            print('Model    ', model_answer)
+            config.logger.error('Bad item:')
+            config.logger.error('Question ', question)
+            config.logger.error('Reference', reference_answer)
+            config.logger.error('Model    ', model_answer)
             exit(1)
             continue  # skip malformed items
 
@@ -150,18 +177,26 @@ def main():
         if index%10==0:
             avg_time = total_time / index  # Average time per item so far
             avg_eval_time = eval_answer_total_time / index  # Average time per item so far
-            print(f'{index} ({avg_time:.2f})', end =' ', flush=True) 
-
-    print()
+            config.logger.info(f'{index} ({avg_time:.2f})', end =' ', flush=True) 
+        pbar.update(1)
+    
+    config.logger.info()
 
     json.dump(qa_pairs, out_f, ensure_ascii=False, indent=2)
+
+    pbar.close()
 
     if scores:
         mean_score = statistics.mean(scores)
         variance_score = statistics.pvariance(scores)  # population variance
     else:
-        print("No valid QA pairs found or no scores computed.")
+        config.logger.warning("No valid QA pairs found or no scores computed.")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        config.logger.warning("EXIT: Execution interrupted by user")
+        sys.exit(0)
+
