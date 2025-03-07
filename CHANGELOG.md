@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.7 - (in progress) (CeC)
+- moved NoOpTdm to config.py for re-use by scripts w/o dupe
+- implemented -v -q and pbar in score_answers
 ## v0.6 - 06Mar (CeC)
 - moved additional values (e.g., Temperature) out of code and into config.yml
 - Implemented improvements from generate_mcqs into generate_answers, including
