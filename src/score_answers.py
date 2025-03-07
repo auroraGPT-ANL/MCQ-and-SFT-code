@@ -186,7 +186,10 @@ def main():
         if index % 10 == 0:
             avg_time = total_time / index
             avg_eval_time = eval_answer_total_time / index
-            config.logger.info(f'{index} (avg_time={avg_time:.2f}s, eval_time={avg_eval_time:.2f}s)', end=' ', flush=True)
+            config.logger.info(
+                    f"{index} (avg_time={avg_time:.2f}s, "
+                    f"eval_time={avg_eval_time:.2f}s)"
+            )
 
         pbar.update(1)
 
