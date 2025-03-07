@@ -13,6 +13,23 @@ if not logger.handlers:
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
+# add a "no op" progress bar for quiet mode
+class NoOpTqdm:
+    """A do-nothing progress bar class that safely ignores all tqdm calls."""
+    def __init__(self, total=0, desc="", unit=""):
+        self.total = total  # Store total count
+        self.n = 0  # Keep track of progress count
+
+    def update(self, n=1):
+        self.n += n  # Simulate tqdm's progress tracking
+
+    def set_postfix_str(self, s):
+        pass  # No-op
+
+    def close(self):
+        pass  # No-op
+
+
 # run this from top level of repo
 def load_config(file_path="config.yml"):
     """

@@ -25,24 +25,6 @@ if __name__ == "__main__":
     main()
 """
 
-# other functions
-
-
-# add a "no op" progress bar for quiet mode
-class NoOpTqdm:
-    """A do-nothing progress bar class that safely ignores all tqdm calls."""
-    def __init__(self, total=0, desc="", unit=""):
-        self.total = total  # Store total count
-        self.n = 0  # Keep track of progress count
-
-    def update(self, n=1):
-        self.n += n  # Simulate tqdm's progress tracking
-
-    def set_postfix_str(self, s):
-        pass  # No-op
-
-    def close(self):
-        pass  # No-op
 
 # ---------------------------------------------------------------------
 
@@ -120,7 +102,7 @@ def main():
     if use_progress_bar:
         pbar = tqdm(total=len(data), desc="Processing", unit="item")
     else:
-        pbar = NoOpTqdm(total=len(data))
+        pbar = config.NoOpTqdm(total=len(data))
 
     # Use JSON Lines file format, append each result immediately rather
     # than waiting to write everything at the end
