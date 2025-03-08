@@ -6,6 +6,8 @@
 - moved score_answers prompts into config.yml
 - can specify models A and B in config.yml to run the entire workflow withoug
   spacifying models on the command line (making way for easy workflow scripts)
+- updated README.md to nudge users to specify models in config.yml vs 
+  command line.
 ## v0.6 - 06Mar2025 (CeC)
 - moved additional values (e.g., Temperature) out of code and into config.yml
 - Implemented improvements from generate_mcqs into generate_answers, including
