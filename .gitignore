@@ -4,3 +4,8 @@ wandb
 __pycache__
 output.log
 .DS_Store
+_JSON
+_MCQ
+_PAPERS
+_RESULTS
+*.json
