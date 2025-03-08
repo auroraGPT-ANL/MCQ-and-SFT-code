@@ -4,9 +4,7 @@ import sys
 import json
 import os
 import statistics
-import requests
 import time
-import glob
 import argparse
 from tqdm import tqdm
 import logging
@@ -20,8 +18,6 @@ def score_answer(index, model, question: str, reference_answer: str, user_answer
     Calls the model to evaluate how consistent the user_answer is with the reference_answer.
     Returns a numeric score (float) from 1 to 10.
     """
-
-    # Build the main scoring prompt from config
     eval_prompt = config.score_main_prompt.format(
         question=question,
         reference_answer=reference_answer,
@@ -29,18 +25,15 @@ def score_answer(index, model, question: str, reference_answer: str, user_answer
     )
     system_msg = config.score_main_system
 
-    # Call the model with the main prompt
     response = model.run(
         user_prompt=eval_prompt,
         system_prompt=system_msg,
         temperature=0.0
     )
 
-    # Attempt to parse the response as a float
     try:
         score = float(response)
     except ValueError:
-        # If that fails, try the fallback prompt
         score = try_again_to_extract_score(model, user_answer)
 
     return score
@@ -62,18 +55,26 @@ def try_again_to_extract_score(model, user_answer: str) -> float:
         )
         score = float(response)
     except:
-        config.logger.info(f"Score of 0 for bad response++++\n{user_answer}\n+++++++++\n")
+        config.logger.info(
+            f"Score of 0 for bad response++++\n{user_answer}\n+++++++++\n"
+        )
         score = 0.0
 
     return score
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Program to use LLM B to rate answers provided previously by LLM A')
-    parser.add_argument('-a','--modelA_name', help='modelA name', required=True)
-    parser.add_argument('-b','--modelB_name', help='modelB name', required=True)
-    parser.add_argument('-o','--output', help='Output directory', required=True)
-    parser.add_argument('-f','--force',  help='Process even if score file exists', action="store_true")
+    parser = argparse.ArgumentParser(
+        description='Program to use LLM B to rate answers provided previously by LLM A'
+    )
+    parser.add_argument( '-a','--modelA_name',
+                        help='modelA name', default=config.model["name"])
+    parser.add_argument( '-b','--modelB_name',
+                        help='modelB name', default=config.model_b["name"])
+    parser.add_argument('-o','--output',
+                        help='Output directory', default=config.results_dir)
+    parser.add_argument('-f','--force',
+                        help='Process even if score file exists', action="store_true")
     parser.add_argument('-c', "--cache-dir", type=str,
                         default=os.getenv("HF_HOME"),
                         help="Custom cache directory for Hugging Face")
@@ -95,19 +96,21 @@ def main():
         config.logger.setLevel(logging.WARNING)
         use_progress_bar = True
 
-    # Set HF_HOME if using custom cache directory
     if args.cache_dir:
         os.environ["HF_HOME"] = args.cache_dir
         config.logger.info(f"Using Hugging Face cache directory: {args.cache_dir}")
 
-    output_dir   = args.output
+    output_dir = args.output
 
     modelA_name = args.modelA_name
     modelB_name = args.modelB_name
-    modelB      = Model(modelB_name)
+    modelB = Model(modelB_name)
 
     # Load previously generated answers from modelA
-    answer_file = os.path.join(output_dir, 'answers_' + modelA_name.replace('/', '+') + '.json')
+    answer_file = os.path.join(
+        output_dir,
+        'answers_' + modelA_name.replace('/', '+') + '.json'
+    )
     config.logger.info(f'Looking for {answer_file}')
     if not os.path.exists(answer_file):
         config.logger.error(f'No answers file for {modelA_name}')
@@ -121,26 +124,27 @@ def main():
         config.logger.error(f"Score file already exists: {score_file}")
         sys.exit(1)
 
-    out_f = open(score_file, 'w', encoding='utf-8')
-
-    # Load question-answer pairs
     with open(answer_file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    scores   = []
-    qa_pairs = []
-
-    # Create progress bar if not in --quiet or --verbose mode.
+    from config import NoOpTqdm
     if use_progress_bar:
+        from tqdm import tqdm
         pbar = tqdm(total=len(data), desc="Processing", unit="item")
     else:
-        pbar = config.NoOpTqdm(total=len(data))
+        pbar = NoOpTqdm(total=len(data))
 
+    scores   = []
+    qa_pairs = []
+    import time
     start_time = time.time()
     total_time = 0
     eval_answer_total_time = 0
 
     config.logger.info(f'Processing {len(data)} QA pairs')
+    out_path = score_file
+    out_f = open(out_path, 'w', encoding='utf-8')
+
     for (qa_pair, index) in zip(data, range(1, len(data) + 1)):
         question         = qa_pair.get("question", "")
         reference_answer = qa_pair.get("reference", "")
@@ -151,13 +155,12 @@ def main():
         chunknum         = qa_pair.get("chunknum", "")
 
         if not question or not reference_answer or not model_answer:
-            config.logger.error('Bad item:')
-            config.logger.error(f'Question: {question}')
-            config.logger.error(f'Reference: {reference_answer}')
-            config.logger.error(f'Model: {model_answer}')
+            config.logger.error("Bad item:")
+            config.logger.error(f"question: {question}")
+            config.logger.error(f"reference: {reference_answer}")
+            config.logger.error(f"model: {model_answer}")
             sys.exit(1)
 
-        # Use modelB to evaluate/grade the generated answer
         eval_answer_start_time = time.time()
         score = score_answer(index, modelB, question, reference_answer, model_answer)
         eval_answer_time = time.time() - eval_answer_start_time
@@ -187,26 +190,23 @@ def main():
             avg_time = total_time / index
             avg_eval_time = eval_answer_total_time / index
             config.logger.info(
-                    f"{index} (avg_time={avg_time:.2f}s, "
-                    f"eval_time={avg_eval_time:.2f}s)"
+                f"{index} (avg_time={avg_time:.2f}s, eval_time={avg_eval_time:.2f}s)"
             )
 
         pbar.update(1)
 
-    config.logger.info("")  # Just to flush a newline
-
-    json.dump(qa_pairs, out_f, ensure_ascii=False, indent=2)
     pbar.close()
 
+    json.dump(qa_pairs, out_f, ensure_ascii=False, indent=2)
+    out_f.close()
+
     if scores:
+        import statistics
         mean_score = statistics.mean(scores)
         variance_score = statistics.pvariance(scores)
         config.logger.info(f"Scores computed: mean={mean_score:.2f}, variance={variance_score:.2f}")
     else:
         config.logger.warning("No valid QA pairs found or no scores computed.")
-
-    out_f.close()
-
 
 if __name__ == "__main__":
     try:

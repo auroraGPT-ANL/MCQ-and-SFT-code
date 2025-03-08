@@ -14,9 +14,6 @@ import argparse
 from tqdm import tqdm  # CeC: tqdm for progress bar
 
 from model_access import Model
-#from inference_auth_token import get_access_token
-
-#from alcf_inference_utilities import get_names_of_alcf_chat_models
 
 
 ##############################################################################
@@ -181,7 +178,8 @@ def generate_mcqs(model, path, filename, linenum, chunks: list, pbar) -> list:
 
             if isinstance(model_score, int) and model_score > config.minScore:
                 config.logger.info(f"mcq generated, score {model_score} > {config.minScore}.")
-                chunks_successful +=1
+                chunks_successful += 1
+
 
                 qa_pairs.append({
                     "file": filename,
@@ -235,7 +233,7 @@ def generate_mcqs(model, path, filename, linenum, chunks: list, pbar) -> list:
                         "answer": model_answer,
                         "text": augmented_chunk
                     })
-                    chunks_succeesful +=1
+                    chunks_successful +=1
                 else:
                     config.logger.info("Chunk fail: Could not fix JSON")
                     chunks_failed +=1

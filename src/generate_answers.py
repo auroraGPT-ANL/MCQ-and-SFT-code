@@ -30,8 +30,8 @@ if __name__ == "__main__":
 
 def main():
     parser = argparse.ArgumentParser(description='Program to use LLM to provide answers to MCQs')
-    parser.add_argument('-m','--model', help='model',
-                        required=True)
+    parser.add_argument('-m','--model', help='Model to use',
+                        default=config.defaultModel)
     parser.add_argument('-s','--start', help='Number to start at in MCQs file',
                         default='0')
     parser.add_argument('-e','--end', help='End number in MCQs file',
