@@ -217,7 +217,7 @@ as *model\_b* in *config.yml*:
 python src/score_answers.py \
 ```
 
-As with other seciprts yere, you can override *config.yml* settins and
+As with other scripts here, you can override *config.yml* settins and
  specify models in the command line, e.g.:
 ```bash
 python src/score_answers.py \
@@ -244,7 +244,7 @@ python src/review_status.py -i MCQ-combined.json
 
 ---
 
-## below this point the paths, etc. are outdated and need to be fixed
+### Below this point the paths, etc. are outdated and need to be fixed
 
 ## Additional Notes
 - This pipeline ensures **high-quality multiple-choice questions** are generated and scored using AI.
