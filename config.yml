@@ -22,7 +22,7 @@ directories:
 # 
 
 model:
-  name:        "alcf:meta-llama/Meta-Llama-3-70B-Instruct"
+  name:        "local:deepseek-r1-distill-llama-8b"
   temperature:  0.7
   baseModel:   "None"
   Tokenizer:   "None"
@@ -30,7 +30,7 @@ model:
 # model-B for score_answers.py
 
 model_b:
-  name:        "alcf:mistralai/Mistral-7B-Instruct-v0.3"
+  name:        "local:deepseek-r1-distill-llama-8b"
   temperature:  0.7
   baseModel:   "None"
   Tokenizer:   "None"
