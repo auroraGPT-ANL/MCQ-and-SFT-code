@@ -29,8 +29,6 @@ class NoOpTqdm:
     def close(self):
         pass  # No-op
 
-
-# run this from top level of repo
 def load_config(file_path="config.yml"):
     """
     Safely load configuration settings from a YAML file.
@@ -46,15 +44,20 @@ def load_config(file_path="config.yml"):
         logger.error(f"Error parsing YAML file '{file_path}': {exc}")
         raise
 
-# Load the configuration.
+# Load the raw YAML data
 _config = load_config()
 
-# Group variables logically.
-prompts =      _config.get("prompts", {})
-model_config = _config.get("model", {})
-quality =      _config.get("quality", {})
+# --- Model dictionaries ---
+# Using a dictionary approach (each is a dict).
+model   = _config.get("model", {})
+model_b = _config.get("model_b", {})
 
-# generate_mcqs prompts
+# --- In case the users does not define these in config.yml, we'll use these defaults
+defaultModel = model.get("name", "alcf:meta-llama/Meta-Llama-3-70B-Instruct")
+defaultModelB = model_b.get("name", "alcf:mistralai/Mistral-7B-Instruct-v0.3")
+
+# --- Standard MCQ generation prompts ---
+prompts = _config.get("prompts", {})
 system_message     = prompts.get("system_message", "")
 user_message       = prompts.get("user_message", "")
 system_message_2   = prompts.get("system_message_2", "")
@@ -62,26 +65,21 @@ user_message_2     = prompts.get("user_message_2", "")
 system_message_3   = prompts.get("system_message_3", "")
 user_message_3     = prompts.get("user_message_3", "")
 
-# score_answers prompts
-scoring_prompts      = _config.get("scoring_prompts", {})
-score_main_system    = scoring_prompts.get("main_system", "")
-score_main_prompt    = scoring_prompts.get("main_prompt", "")
+# --- Scoring prompts for score_answers.py ---
+scoring_prompts       = _config.get("scoring_prompts", {})
+score_main_system     = scoring_prompts.get("main_system", "")
+score_main_prompt     = scoring_prompts.get("main_prompt", "")
 score_fallback_system = scoring_prompts.get("fallback_system", "")
 score_fallback_prompt = scoring_prompts.get("fallback_prompt", "")
 
-# Model config
-defaultModel = model_config.get("name", "alcf:mistralai/Mistral-7B-Instruct-v0.3")
-defaultTemperature = model_config.get("temperature", 0.7)
-defaultBaseModel =   model_config.get("baseModel", "None")
-defaultTokenizer =   model_config.get("Tokenizer", "None")
+# --- Other config sections ---
+quality      = _config.get("quality", {})
+minScore     = quality.get("minScore", 7)
+chunkSize    = quality.get("chunkSize", 1024)
 
-# Quality (MCQ) settings
-minScore           = quality.get("minScore", 7)
-chunkSize          = quality.get("chunkSize", 1024)
-
-# Directories for user data
 directories = _config.get("directories", {})
 papers_dir  = directories.get("papers", "_PAPERS")
 json_dir    = directories.get("json", "_JSON")
 mcq_dir     = directories.get("mcq", "_MCQ")
 results_dir = directories.get("results", "_RESULTS")
+

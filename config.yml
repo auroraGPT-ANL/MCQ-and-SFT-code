@@ -18,8 +18,18 @@ directories:
 # on the command line. Model name below is used if no model is specified on 
 # the comment line.
 #
+# this model will also be default for Model-A for score_answers.py
+# 
 
 model:
+  name:        "alcf:meta-llama/Meta-Llama-3-70B-Instruct"
+  temperature:  0.7
+  baseModel:   "None"
+  Tokenizer:   "None"
+
+# model-B for score_answers.py
+
+model_b:
   name:        "alcf:mistralai/Mistral-7B-Instruct-v0.3"
   temperature:  0.7
   baseModel:   "None"
