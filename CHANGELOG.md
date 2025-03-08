@@ -1,10 +1,12 @@
 # Changelog
 
-## v0.7 - (in progress) (CeC)
+## v0.7 - 08Mar2025 (CeC)
 - moved NoOpTdm to config.py for re-use by scripts w/o dupe
 - implemented -v -q and pbar in score_answers
 - moved score_answers prompts into config.yml
-## v0.6 - 06Mar (CeC)
+- can specify models A and B in config.yml to run the entire workflow withoug
+  spacifying models on the command line (making way for easy workflow scripts)
+## v0.6 - 06Mar2025 (CeC)
 - moved additional values (e.g., Temperature) out of code and into config.yml
 - Implemented improvements from generate_mcqs into generate_answers, including
   -v and -q as well as default (!v and !q) progress bar.
@@ -14,17 +16,17 @@
   you were not using an ALCF-hosted model.
 - reorganized repo to put .py scripts in src directory - adjusted the various
   pathnames in scripts and README.md
-## v0.5 - 28Feb (CeC)
+## v0.5 - 28Feb2025 (CeC)
 - changed strategy on logging in generate_mcqs.py.  Default is now progress bar
   (no logger.info chatter). -q or --quiet is now totally silent unless critical 
   errors are thrown.  -v or --verbose to get progress messages (logger.info) for
   debugging prompts, etc.
 
-## v0.4 - 24Feb (CeC)
+## v0.4 - 24Feb2025 (CeC)
 - improved consistency of valid JSON creation (via more pointed prompts)
 - report stats for each file - MCQ created and misfires (generally invalid
   JSON), i.e., success or failure generating an MCQ for each chunk.
-## v0.3 - 21Feb (CeC)
+## v0.3 - 21Feb2025 (CeC)
 - replaced print statements with logging
 - implemented tqdm progress bar (including a null stub to suppress when in default
   INFO logging level which logs what used to be printed by default to monitor progress
@@ -33,13 +35,13 @@
 - fixed a few string ops by forcing str(var) (just a bit cleaner output, since
   non-string items throw exceptions at string operations like .lower or .strip)
 
-## v0.2 - 11Feb (CeC)
+## v0.2 - 11Feb2025 (CeC)
 - added jq to environment for easy reading json
 - added step to check what models are running prior to firing off generate\_mcqs
 - verified (on MacOS CLI) that the entire workflow example, steps 1-8, works
   though there are various errors to be expected (with imperfect data).
 
-## v0.1 - 10Feb (CeC)
+## v0.1 - 10Feb2025 (CeC)
 - README.md - overhaul initial steps of workflow
 - alcf\_inference\_utilities.py - Modified to exit with simple error message in cases where
   no network path available (such as not being local to ALCF or on VPN), avoiding
