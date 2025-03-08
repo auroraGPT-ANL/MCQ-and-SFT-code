@@ -48,8 +48,6 @@ and **scores** of those answers.
 7. Review the status of MCQ generation and scoring.
 
 
-
-
 ---
 
 ## Preparation Steps
@@ -90,6 +88,11 @@ conda activate globus_env
 (**Note:** If you get `CondaValueError: prefix already exists`, edit`environment.yml` and change the `name:`,
 then create and activate that env.)
 
+#### Set up your *config.yml* file
+
+We have already seen *config.yml* above with respect to default direcotires.
+While all of the scripts below can be invoked with models specified in the command line, 
+4ou can also set up your workflow by specifying Model A and Model B in *config.yml*.
 
 ---
 
@@ -133,7 +136,6 @@ Piping the output to ``jq`` (Command-line JSON processor) makes it much easier t
 ```
 python src/inference_auth_token.py authenticate --force
 ```
-
 3. **Run MCQ generation:**
 This step uses generate_mcqs.py to divide text into chunks, generate MCQs, and
 include reference answers.
@@ -144,16 +146,19 @@ a model to load can take 10-15 minutes (see
 For this example we are using `Mistral-7B-Instruct-v0.3`. Omitting the -m option
 defaults to *openai:gpt-4o*.
 
+If you have set up your models in *config.yml*:
+   ```bash
+   python src/generate_mcqs.py 
+   ```
+
+If you want to specify your model in the command line:
 
    ```bash
    python src/generate_mcqs.py -m 'alcf:mistralai/Mistral-7B-Instruct-v0.3'
    ```
-**Note:** You can specify input and output with, e.g., `-i _JSON -o _MCQ`, and the
-model with -m as shown here; otherwise the
-code will default to the default model and directories specified in `config.yml`.
-
-The code by default displays a progress bar. In -v / --verbose mode informational 
-messages are displayed and in -q / --quiet mode no output is displayed.
+By default, the code displays a progress bar. You can display informational
+progress messages using the -v / --verbose option or you can suppress all
+information and progress bar using -q / --quiet.
 
 ---
 
@@ -161,8 +166,10 @@ messages are displayed and in -q / --quiet mode no output is displayed.
    ```bash
    python src/combine_json_files.py -o MCQ-combined.json
    ```
-Here you can override the settings in config.yml by specifying -i on the command line,
-but you must specify the filename for your combined file as shown here.
+
+Input for this step is taken from the directory specified in *config.yml*.
+Here you can override by specifying -i (--input), but you must specify
+the filename for your combined file (-o or --output) as shown here.
 
 ---
 
@@ -178,37 +185,48 @@ Here you must specify the filenames for your combined and subset files as shown 
 ---
 
 ### 5. Generate Answers for MCQs Using a Different Model
-This step uses an AI model to generate **new answers** for the selected MCQs. We will
-use a differnet model than above here. Note the form for specifying the model is 
-`<locn>:<model>` and in this example we will use `meta-llama/Meta-Llama-3-70B-Instruct`,
-whose endpoint is running at <locn> = `alcf`..
+This step uses the model specified in *config.yml* to generate **new answers** for
+the selected MCQs. If you want to continue using the model in *config.yml* for this 
+step:
+```bash
+python src/generate_answers.py -i MCQ-subset.json
+```
+
+You can also specify a different model here using the -m (--model) option:
 
 ```bash
 python src/generate_answers.py -i MCQ-subset.json \
        -m 'alcf:meta-llama/Meta-Llama-3-70B-Instruct'
 ```
-Shown here is `MCQ-subset.json` assuming you performed step 4; otherwise use `MCQ-combined.json` 
+Note the input shown here is `MCQ-subset.json` which assumes that you
+performed step 4; otherwise use `MCQ-combined.json` 
 (or whatever filename you used for output in step 3)
 
-The code by default displays a progress bar. In -v / --verbose mode informational 
-messages are displayed and in -q / --quiet mode no output is displayed.
+As with *generare_mcqs.py* this code by default displays a progress bar.
+In -v / --verbose mode informational messages are displayed and in
+-q / --quiet mode no output is displayed.
 
 ---
 
 ### 6. Score AI-Generated Answers
-An AI model evaluates and scores the generated answers against reference answers. Here we
-will use
-`alcf:mistralai/Mistral-7B-Instruct-v0.3`
-to evaluate the answers we created in the previous step with
-`alcf:meta-llama/Meta-Llama-3-70B-Instruct`
+An AI model evaluates and scores the generated answers against reference answers.
+By default this script assumes that the model specified in *config.yml* was used
+by generate\_answers.py (in the previous step) and will use the model specified
+as *model\_b* in *config.yml*:
+```bash
+python src/score_answers.py \
+```
 
+As with other seciprts yere, you can override *config.yml* settins and
+ specify models in the command line, e.g.:
 ```bash
 python src/score_answers.py \
        -a 'alcf:meta-llama/Meta-Llama-3-70B-Instruct' \
        -b 'alcf:mistralai/Mistral-7B-Instruct-v0.3'
 ```
-As with previous steps, input and output directories default to the directories specified in config.yml but can
-be overriden with -i and/or -o on the command line. 
+As with previous steps, input and output directories default to the directories
+specified in config.yml but can
+be overriden with -i (--input) and/or -o (--output)  on the command line. 
 - **Input:**  `_RESULTS/answers_<model-A>.json`
 - **Output:** `_RESULTS/scores_<locn-A>:<model-A>_<locn-B>:<model-B>.json`
 - **Note:** Any `/` in model names is replaced with `+` in filenames.
