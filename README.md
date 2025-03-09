@@ -90,9 +90,10 @@ then create and activate that env.)
 
 #### Set up your *config.yml* file
 
-We have already seen *config.yml* above with respect to default direcotires.
+We have already seen *config.yml* above with respect to default directories.
 While all of the scripts below can be invoked with models specified in the command line, 
-4ou can also set up your workflow by specifying Model A and Model B in *config.yml*.
+you can also set up your workflow by specifying Model A and Model B in *config.yml*,
+eliminating the need to specify models on the command line.
 
 ---
 
