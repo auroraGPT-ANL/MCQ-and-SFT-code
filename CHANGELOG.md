@@ -1,25 +1,28 @@
 # Changelog
 
+## v0.8 - 09Mar2025 (CeC)
+- created an initial parallel version of generate\_mcqs.  Works well but keyboard 
+  interrupt (^C) to abort is not so clean (a cosmetic issue for later fixing).
 ## v0.7 - 08Mar2025 (CeC)
 - moved NoOpTdm to config.py for re-use by scripts w/o dupe
-- implemented -v -q and pbar in score_answers
-- moved score_answers prompts into config.yml
+- implemented -v -q and pbar in score\_answers
+- moved score\_answers prompts into config.yml
 - can specify models A and B in config.yml to run the entire workflow withoug
   spacifying models on the command line (making way for easy workflow scripts)
 - updated README.md to nudge users to specify models in config.yml vs 
   command line.
 ## v0.6 - 06Mar2025 (CeC)
 - moved additional values (e.g., Temperature) out of code and into config.yml
-- Implemented improvements from generate_mcqs into generate_answers, including
+- Implemented improvements from generate\_mcqs into generate\_answers, including
   -v and -q as well as default (!v and !q) progress bar.
-- Changed generate_answers to write output after each loop rather than saving all
+- Changed generate\_answers to write output after each loop rather than saving all
   results and writing the file at the end.
 - undid an earlier change that tried to authenticate with ALCF endpoints even if
   you were not using an ALCF-hosted model.
 - reorganized repo to put .py scripts in src directory - adjusted the various
   pathnames in scripts and README.md
 ## v0.5 - 28Feb2025 (CeC)
-- changed strategy on logging in generate_mcqs.py.  Default is now progress bar
+- changed strategy on logging in generate\_mcqs.py.  Default is now progress bar
   (no logger.info chatter). -q or --quiet is now totally silent unless critical 
   errors are thrown.  -v or --verbose to get progress messages (logger.info) for
   debugging prompts, etc.
