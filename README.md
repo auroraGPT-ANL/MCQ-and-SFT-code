@@ -1,6 +1,4 @@
-## (this page under construction)
-
-# Code for MCQ-based evaluation, etc.
+# Code for Creating and Scoring Multiple Choice Questions (MCQs) from Papers
 
 Here we describe Python programs for:
 * Generating and evaluating MCQs
