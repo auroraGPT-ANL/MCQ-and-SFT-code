@@ -160,6 +160,15 @@ By default, the code displays a progress bar. You can display informational
 progress messages using the -v / --verbose option or you can suppress all
 information and progress bar using -q / --quiet.
 
+For large numbers of papers, there is a parallel version of *generate_mcqs* with a
+-p (--parallel) option to specify the number of threads. Default is 4. 
+For example, to run 8-way parallel:
+   ```bash
+   python src/parallel_generate_mcqs.py -p 8
+   ```
+Other options (-v, -q, -m work the same as with *generate_mcqs*.
+   
+
 ---
 
 ### 3. Combine multiple MCQ JSON files into a single file
