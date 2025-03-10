@@ -1,5 +1,10 @@
 # Changelog
 
+### v0.9 - 10Mar2025 (CeC)
+- created an initial parallel version of generate\_answers.  Works well but 
+  (as with parallel\generate\_mcqs, keyboard 
+  interrupt (^C) to abort is not so clean (a cosmetic issue for later fixing).
+
 ### v0.8 - 09Mar2025 (CeC)
 - created an initial parallel version of generate\_mcqs.  Works well but keyboard 
   interrupt (^C) to abort is not so clean (a cosmetic issue for later fixing).

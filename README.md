@@ -200,7 +200,13 @@ step:
 python src/generate_answers.py -i MCQ-subset.json
 ```
 
-You can also specify a different model here using the -m (--model) option:
+If you have more than a handful of QA pairs you should use the parallel version:
+```bash
+python src/parallel_generate_answers.py -i MCQ-subset.json
+```
+
+For either version youy can specify a different model here using the -m (--model) option
+if you don't want to use the model specified in config.yml.:
 
 ```bash
 python src/generate_answers.py -i MCQ-subset.json \
