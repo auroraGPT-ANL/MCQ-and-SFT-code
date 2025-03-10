@@ -72,10 +72,12 @@ score_main_prompt     = scoring_prompts.get("main_prompt", "")
 score_fallback_system = scoring_prompts.get("fallback_system", "")
 score_fallback_prompt = scoring_prompts.get("fallback_prompt", "")
 
-# --- Other config sections ---
+# --- Other config values ---
 quality      = _config.get("quality", {})
 minScore     = quality.get("minScore", 7)
 chunkSize    = quality.get("chunkSize", 1024)
+saveInterval = quality.get("saveInterval", 50) # for parallel_generate_answers.py
+
 
 directories = _config.get("directories", {})
 papers_dir  = directories.get("papers", "_PAPERS")

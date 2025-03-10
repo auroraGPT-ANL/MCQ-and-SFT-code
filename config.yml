@@ -23,7 +23,7 @@ directories:
 
 model:
   name: "alcf:meta-llama/Meta-Llama-3-70B-Instruct"
-  #name:        "local:deepseek-r1-distill-llama-8b"
+#  name:        "local:deepseek-r1-distill-llama-8b"
   temperature:  0.7
   baseModel:   "None"
   Tokenizer:   "None"
@@ -42,7 +42,8 @@ model_b:
 quality:
   minScore:    7
   chunkSize:   1000
-
+  save_interval: 50 # (for parallel_generate_answers.py - how many QA pairs to process before updating resutls file)
+ 
 
 ####### ABOUT CHANGING THESE PROMPTS #######
 ## NOTE: Python's str.format() treats any single braces {...} as placeholders.
