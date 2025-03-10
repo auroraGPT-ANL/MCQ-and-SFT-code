@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# score_answers.py
+
 import sys
 import json
 import os
@@ -107,10 +109,13 @@ def main():
     modelB = Model(modelB_name)
 
     # Load previously generated answers from modelA
-    answer_file = os.path.join(
-        output_dir,
-        'answers_' + modelA_name.replace('/', '+') + '.json'
-    )
+    #answer_file = os.path.join(
+    #    output_dir,
+    #    'answers_' + modelA_name.replace('/', '+') + '.json'
+    #)
+    # we are using jsonl now
+    answer_file = os.path.join(output_dir, 'answers_' + modelA_name.replace('/', '+') + '.jsonl')
+
     config.logger.info(f'Looking for {answer_file}')
     if not os.path.exists(answer_file):
         config.logger.error(f'No answers file for {modelA_name}')
@@ -124,8 +129,13 @@ def main():
         config.logger.error(f"Score file already exists: {score_file}")
         sys.exit(1)
 
+# we are now using jsonl (json lists) rather than json in our outputs from
+# generate_mcqs and generate_answers (and the parallel versions)
+
+    #with open(answer_file, "r", encoding="utf-8") as f:
+        #data = json.load(f)
     with open(answer_file, "r", encoding="utf-8") as f:
-        data = json.load(f)
+        data = [json.loads(line) for line in f if line.strip()]
 
     from config import NoOpTqdm
     if use_progress_bar:
