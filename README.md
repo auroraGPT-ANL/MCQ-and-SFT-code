@@ -231,6 +231,14 @@ as *model\_b* in *config.yml*:
 python src/score_answers.py \
 ```
 
+Or if you have many answers to score, use the parallel version:
+```bash
+python src/parallel_score_answers.py \
+```
+This will run with default 4-way parallel. You can change that using -p *n* 
+or --parallel *n* where *n* is the number of threads you want to use.
+
+
 As with other scripts here, you can override *config.yml* settins and
  specify models in the command line, e.g.:
 ```bash
