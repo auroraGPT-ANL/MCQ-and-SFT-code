@@ -72,17 +72,7 @@ def main():
                         help='Enable verbose logging')
     args = parser.parse_args()
 
-    # Set logging level and progress bar usage
-    if args.verbose:
-        config.logger.setLevel(logging.INFO)
-        use_progress_bar = False
-        config.logger.info("Verbose mode enabled")
-    elif args.quiet:
-        config.logger.setLevel(logging.CRITICAL)
-        use_progress_bar = False
-    else:
-        config.logger.setLevel(logging.WARNING)
-        use_progress_bar = True
+    use_progress_bar = config.configure_verbosity(args)
 
     # Set Hugging Face cache directory if provided
     if args.cache_dir:

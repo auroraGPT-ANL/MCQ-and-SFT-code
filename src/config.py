@@ -29,6 +29,30 @@ class NoOpTqdm:
     def close(self):
         pass  # No-op
 
+##
+
+def configure_verbosity(args):
+    """
+    Set logging level and decide whether to use a progress bar based on command-line arguments.
+    Returns:
+        use_progress_bar (bool): True if a progress bar should be used, False otherwise.
+    """
+    if args.verbose:
+        logger.setLevel(logging.INFO)
+        use_progress_bar = False
+        logger.info("verbose mode")
+    elif args.quiet:
+        logger.setLevel(logging.CRITICAL)
+        use_progress_bar = False
+        logger.info("quiet mode")
+    else:
+        logger.setLevel(logging.WARNING)
+        use_progress_bar = True
+        logger.info("progress bar only mode")
+    return use_progress_bar
+
+##
+
 def load_config(file_path="config.yml"):
     """
     Safely load configuration settings from a YAML file.
@@ -45,6 +69,7 @@ def load_config(file_path="config.yml"):
         raise
 
 # Load the raw YAML data
+
 _config = load_config()
 
 # --- Model dictionaries ---

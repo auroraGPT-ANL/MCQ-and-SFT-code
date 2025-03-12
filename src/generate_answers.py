@@ -50,20 +50,7 @@ def main():
 
     args = parser.parse_args()
 
-    # Decide logging level and whether to show a progress bar
-
-    if args.verbose:
-        config.logger.setLevel(logging.INFO)
-        use_progress_bar = False
-        config.logger.info("verbose mode")
-    elif args.quiet:
-        config.logger.setLevel(logging.CRITICAL)
-        use_progress_bar = False
-        config.logger.info("quiet mode")
-    else:  # default case
-        config.logger.setLevel(logging.WARNING)
-        use_progress_bar = True
-        config.logger.info("progress bar only mode")
+    use_progress_bar = config.configure_verbosity(args)
 
     # Set HF_HOME if using custom cache directory
     if args.cache_dir:
