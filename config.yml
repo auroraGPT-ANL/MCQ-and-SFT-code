@@ -41,9 +41,11 @@ model_b:
 # Other MCQ-related parameters
 
 quality:
-  minScore:    7
-  chunkSize:   1000
-  save_interval: 50 # (for parallel_generate_answers.py and parallel_score_answers- how many QA pairs to process before updating resutls file)
+  minScore:         7
+  chunkSize:     1000  # For generate_mcqs chunking json files for mcqs
+  save_interval:   50  # For parallel_generate_answers.py and parallel_score_answers- how
+                       # many QA pairs to process before updating resutls file)
+  defaultThreads:   4  # default n-way parallel, can override with -p/--parallel
  
 
 ####### ABOUT CHANGING THESE PROMPTS #######

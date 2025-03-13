@@ -83,12 +83,12 @@ defaultModelB = model_b.get("name", "alcf:mistralai/Mistral-7B-Instruct-v0.3")
 
 # --- Standard MCQ generation prompts ---
 prompts = _config.get("prompts", {})
-system_message     = prompts.get("system_message", "")
-user_message       = prompts.get("user_message", "")
-system_message_2   = prompts.get("system_message_2", "")
-user_message_2     = prompts.get("user_message_2", "")
-system_message_3   = prompts.get("system_message_3", "")
-user_message_3     = prompts.get("user_message_3", "")
+system_message        = prompts.get("system_message", "")
+user_message          = prompts.get("user_message", "")
+system_message_2      = prompts.get("system_message_2", "")
+user_message_2        = prompts.get("user_message_2", "")
+system_message_3      = prompts.get("system_message_3", "")
+user_message_3        = prompts.get("user_message_3", "")
 
 # --- Scoring prompts for score_answers.py ---
 scoring_prompts       = _config.get("scoring_prompts", {})
@@ -98,15 +98,16 @@ score_fallback_system = scoring_prompts.get("fallback_system", "")
 score_fallback_prompt = scoring_prompts.get("fallback_prompt", "")
 
 # --- Other config values ---
-quality      = _config.get("quality", {})
-minScore     = quality.get("minScore", 7)
-chunkSize    = quality.get("chunkSize", 1024)
-saveInterval = quality.get("saveInterval", 50) # for parallel_generate_answers.py
+quality               = _config.get("quality", {})
+minScore              = quality.get("minScore", 7)
+chunkSize             = quality.get("chunkSize", 1024)
+saveInterval          = quality.get("saveInterval", 50) # for parallel_generate_answers.py
+defaultThreads        = quality.get("defaultThreads", 4) 
 
 
-directories = _config.get("directories", {})
-papers_dir  = directories.get("papers", "_PAPERS")
-json_dir    = directories.get("json", "_JSON")
-mcq_dir     = directories.get("mcq", "_MCQ")
-results_dir = directories.get("results", "_RESULTS")
+directories           = _config.get("directories", {})
+papers_dir            = directories.get("papers", "_PAPERS")
+json_dir              = directories.get("json", "_JSON")
+mcq_dir               = directories.get("mcq", "_MCQ")
+results_dir           = directories.get("results", "_RESULTS")
 
