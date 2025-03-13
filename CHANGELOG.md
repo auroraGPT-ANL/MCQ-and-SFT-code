@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.0 - 12Mar2025 (CeC)
+- Moved all scripts to parallel versions; parallel\_foobar.py now foobar.py
+  and legacy scripts are renamed serial\_foobar.py
+- implemented pbar, -v, and -q logic for simple\_parse
 ### v0.b - 12Mar2025 (CeC)
 - moved logic to decide on -v, -q, or pbar into config.yml
 - created parallel version of score\_answers

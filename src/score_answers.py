@@ -1,19 +1,19 @@
 #!/usr/bin/env python
 
-# score_answers.py
+# parallel_score_answers.py
 
 import sys
 import json
 import os
-import statistics
 import time
 import argparse
-from tqdm import tqdm
+import statistics
 import logging
+import concurrent.futures
+from tqdm import tqdm
+
 import config
-
 from model_access import Model
-
 
 def score_answer(index, model, question: str, reference_answer: str, user_answer: str) -> float:
     """
@@ -40,11 +40,10 @@ def score_answer(index, model, question: str, reference_answer: str, user_answer
 
     return score
 
-
 def try_again_to_extract_score(model, user_answer: str) -> float:
     """
     Attempts to parse out a final numeric answer using the fallback prompt.
-    If that fails, returns 0.0
+    If that fails, returns 0.0.
     """
     fallback_prompt_text = config.score_fallback_prompt.format(user_answer=user_answer)
     fallback_system_text = config.score_fallback_system
@@ -56,7 +55,7 @@ def try_again_to_extract_score(model, user_answer: str) -> float:
             temperature=0.0
         )
         score = float(response)
-    except:
+    except Exception:
         config.logger.info(
             f"Score of 0 for bad response++++\n{user_answer}\n+++++++++\n"
         )
@@ -64,15 +63,54 @@ def try_again_to_extract_score(model, user_answer: str) -> float:
 
     return score
 
+def process_qa_pair(index, qa_pair, modelB, modelA_name, modelB_name):
+    """
+    Process a single QA pair:
+      - Extract fields from the QA pair.
+      - Evaluate the answer (using score_answer) and measure evaluation time.
+      - Return a tuple (index, result_dict, eval_time).
+    If any required field is missing, logs an error and returns None.
+    """
+    question         = qa_pair.get("question", "")
+    reference_answer = qa_pair.get("reference", "")
+    model_answer     = qa_pair.get("model", "")
+    gen_time         = qa_pair.get("gen_time", "")
+    file             = qa_pair.get("file", "")
+    filenum          = qa_pair.get("filenum", "")
+    chunknum         = qa_pair.get("chunknum", "")
+
+    if not question or not reference_answer or not model_answer:
+        config.logger.error(f"Bad item at index {index}: missing question, reference, or model answer.")
+        return None
+
+    start_eval = time.time()
+    score = score_answer(index, modelB, question, reference_answer, model_answer)
+    eval_time = time.time() - start_eval
+
+    result = {
+        'modelA': modelA_name,
+        'modelB': modelB_name,
+        'index': index,
+        'question': question,
+        'reference': reference_answer,
+        'model': model_answer,
+        'score': score,
+        'gen_time': gen_time,
+        'eval_time': f'{eval_time:.4f}',
+        'file': file,
+        'filenum': filenum,
+        'chunknum': chunknum
+    }
+    return (index, result, eval_time)
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Program to use LLM B to rate answers provided previously by LLM A'
+        description='Use LLM B to rate answers provided by LLM A in parallel'
     )
-    parser.add_argument( '-a','--modelA_name',
-                        help='modelA name', default=config.model["name"])
-    parser.add_argument( '-b','--modelB_name',
-                        help='modelB name', default=config.model_b["name"])
+    parser.add_argument('-a','--modelA_name',
+                        help='Model A name', default=config.model["name"])
+    parser.add_argument('-b','--modelB_name',
+                        help='Model B name', default=config.model_b["name"])
     parser.add_argument('-o','--output',
                         help='Output directory', default=config.results_dir)
     parser.add_argument('-f','--force',
@@ -80,30 +118,36 @@ def main():
     parser.add_argument('-c', "--cache-dir", type=str,
                         default=os.getenv("HF_HOME"),
                         help="Custom cache directory for Hugging Face")
-    parser.add_argument('-q','--quiet',   action='store_true',
+    parser.add_argument('-q','--quiet', action='store_true',
                         help='No progress bar or messages')
     parser.add_argument('-v','--verbose', action='store_true',
                         help='Enable verbose logging')
-
+    parser.add_argument('-p','--parallel', type=int, default=4,
+                        help='Number of parallel threads (default: 4)')
     args = parser.parse_args()
 
-    use_progress_bar = config.configure_verbosity(args)
+    # Set logging level and progress bar usage
+    if args.verbose:
+        config.logger.setLevel(logging.INFO)
+        use_progress_bar = False
+    elif args.quiet:
+        config.logger.setLevel(logging.CRITICAL)
+        use_progress_bar = False
+    else:
+        config.logger.setLevel(logging.WARNING)
+        use_progress_bar = True
 
     if args.cache_dir:
         os.environ["HF_HOME"] = args.cache_dir
         config.logger.info(f"Using Hugging Face cache directory: {args.cache_dir}")
 
     output_dir = args.output
-
     modelA_name = args.modelA_name
     modelB_name = args.modelB_name
     modelB = Model(modelB_name)
 
-    # Load previously generated answers from modelA
-    #answer_file = os.path.join(
-    #    output_dir,
-    #    'answers_' + modelA_name.replace('/', '+') + '.json'
-    #)
+    # Load previously generated answers from Model A
+    #answer_file = os.path.join(output_dir, 'answers_' + modelA_name.replace('/', '+') + '.json')
     # we are using jsonl now
     answer_file = os.path.join(output_dir, 'answers_' + modelA_name.replace('/', '+') + '.jsonl')
 
@@ -120,92 +164,75 @@ def main():
         config.logger.error(f"Score file already exists: {score_file}")
         sys.exit(1)
 
-# we are now using jsonl (json lists) rather than json in our outputs from
-# generate_mcqs and generate_answers (and the parallel versions)
-
     #with open(answer_file, "r", encoding="utf-8") as f:
-        #data = json.load(f)
+    #    data = json.load(f)
     with open(answer_file, "r", encoding="utf-8") as f:
         data = [json.loads(line) for line in f if line.strip()]
 
-    from config import NoOpTqdm
+
+    total_items = len(data)
     if use_progress_bar:
-        from tqdm import tqdm
-        pbar = tqdm(total=len(data), desc="Processing", unit="item")
+        pbar = tqdm(total=total_items, desc="Processing", unit="item")
     else:
-        pbar = NoOpTqdm(total=len(data))
+        from config import NoOpTqdm
+        pbar = NoOpTqdm(total=total_items)
 
-    scores   = []
-    qa_pairs = []
-    import time
-    start_time = time.time()
-    total_time = 0
-    eval_answer_total_time = 0
+    # We'll accumulate results in a buffer and write them periodically.
+    #SAVE_INTERVAL = 10
+    SAVE_INTERVAL = config.saveInterval # for simplicty, use the same value as for parallel_generate_answers
+    output_buffer = []
+    scores_list = []
+    eval_total_time = 0.0
+    processed_count = 0
 
-    config.logger.info(f'Processing {len(data)} QA pairs')
-    out_path = score_file
-    out_f = open(out_path, 'w', encoding='utf-8')
+    config.logger.info(f'Processing {total_items} QA pairs')
 
-    for (qa_pair, index) in zip(data, range(1, len(data) + 1)):
-        question         = qa_pair.get("question", "")
-        reference_answer = qa_pair.get("reference", "")
-        model_answer     = qa_pair.get("model", "")
-        gen_time         = qa_pair.get("gen_time", "")
-        file             = qa_pair.get("file", "")
-        filenum          = qa_pair.get("filenum", "")
-        chunknum         = qa_pair.get("chunknum", "")
+    # Open output file for writing (we'll write in JSON Lines format)
+    if os.path.exists(score_file):
+        os.remove(score_file)
+    out_f = open(score_file, 'a', encoding='utf-8')
 
-        if not question or not reference_answer or not model_answer:
-            config.logger.error("Bad item:")
-            config.logger.error(f"question: {question}")
-            config.logger.error(f"reference: {reference_answer}")
-            config.logger.error(f"model: {model_answer}")
-            sys.exit(1)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.parallel) as executor:
+        future_to_index = {
+            executor.submit(process_qa_pair, idx, qa_pair, modelB, modelA_name, modelB_name): idx
+            for idx, qa_pair in enumerate(data, start=1)
+        }
+        for future in concurrent.futures.as_completed(future_to_index):
+            res = future.result()
+            if res is None:
+                # Skip if item was bad
+                processed_count += 1
+                pbar.update(1)
+                continue
+            idx, result, eval_time = res
+            output_buffer.append(result)
+            scores_list.append(result['score'])
+            eval_total_time += eval_time
+            processed_count += 1
 
-        eval_answer_start_time = time.time()
-        score = score_answer(index, modelB, question, reference_answer, model_answer)
-        eval_answer_time = time.time() - eval_answer_start_time
-        eval_answer_total_time += eval_answer_time
-
-        if score is not None:
-            scores.append(score)
-            qa_pairs.append({
-                'modelA': modelA_name,
-                'modelB': modelB_name,
-                'index': index,
-                'question': question,
-                'reference': reference_answer,
-                'model': model_answer,
-                'score': score,
-                'gen_time': gen_time,
-                'eval_time': f'{eval_answer_time:.4f}',
-                'file': file,
-                'filenum': filenum,
-                'chunknum': chunknum
-            })
-
-        total_time += time.time() - start_time
-        start_time = time.time()
-
-        if index % 10 == 0:
-            avg_time = total_time / index
-            avg_eval_time = eval_answer_total_time / index
-            config.logger.info(
-                f"{index} (avg_time={avg_time:.2f}s, eval_time={avg_eval_time:.2f}s)"
-            )
-
-        pbar.update(1)
+            # Log average times every SAVE_INTERVAL items
+            if processed_count % SAVE_INTERVAL == 0:
+                avg_eval_time = eval_total_time / processed_count
+                config.logger.info(f"{processed_count} items processed (avg eval time = {avg_eval_time:.2f}s)")
+                # Write out buffered results
+                for item in output_buffer:
+                    out_f.write(json.dumps(item, ensure_ascii=False) + "\n")
+                out_f.flush()
+                output_buffer = []
+            pbar.update(1)
 
     pbar.close()
-
-    json.dump(qa_pairs, out_f, ensure_ascii=False, indent=2)
+    # Write any remaining items in the output buffer.
+    if output_buffer:
+        for item in output_buffer:
+            out_f.write(json.dumps(item, ensure_ascii=False) + "\n")
+        out_f.flush()
     out_f.close()
 
-    if scores:
-        import statistics
-        mean_score = statistics.mean(scores)
-        variance_score = statistics.pvariance(scores)
-        config.logger.info(f"Scores computed: mean={mean_score:.2f}, variance={variance_score:.2f}")
+    if scores_list:
+        mean_score = statistics.mean(scores_list)
+        variance_score = statistics.pvariance(scores_list)
+        config.logger.info(f"Scores computed: mean = {mean_score:.2f}, variance = {variance_score:.2f}")
     else:
         config.logger.warning("No valid QA pairs found or no scores computed.")
 
