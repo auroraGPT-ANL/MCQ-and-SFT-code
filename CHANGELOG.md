@@ -1,5 +1,8 @@
 # Changelog
 
+### v0.a - 10Mar2025 (CeC)
+- fix a json vs jsonl issue that crept up...
+
 ### v0.9 - 10Mar2025 (CeC)
 - created an initial parallel version of generate\_answers.  Works well but 
   (as with parallel\generate\_mcqs, keyboard 
