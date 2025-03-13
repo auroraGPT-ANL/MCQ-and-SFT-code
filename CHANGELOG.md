@@ -1,7 +1,12 @@
 # Changelog
 
+### v0.b - 12Mar2025 (CeC)
+- moved logic to decide on -v, -q, or pbar into config.yml
+- created parallel version of score\_answers
+
 ### v0.a - 10Mar2025 (CeC)
 - fix a json vs jsonl issue that crept up...
+- yeah, I'm using hex because I'm not ready to commit to a 1.0!
 
 ### v0.9 - 10Mar2025 (CeC)
 - created an initial parallel version of generate\_answers.  Works well but 
