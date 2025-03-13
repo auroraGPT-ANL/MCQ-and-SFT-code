@@ -407,16 +407,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Decide logging level and whether to show a progress bar 
-    if args.verbose:  
-        config.logger.setLevel(logging.INFO)    
-        use_progress_bar = False                
-    elif args.quiet:  
-        config.logger.setLevel(logging.CRITICAL)  
-        use_progress_bar = False                 
-    else:  # default case 
-        config.logger.setLevel(logging.WARNING)  
-        use_progress_bar = True                 
+    use_progress_bar = config.configure_verbosity(args)
 
     input_directory = args.input
     output_json     = args.output

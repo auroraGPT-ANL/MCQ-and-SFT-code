@@ -87,16 +87,7 @@ def main():
 
     args = parser.parse_args()
 
-    # Decide logging level and whether to show a progress bar
-    if args.verbose:
-        config.logger.setLevel(logging.INFO)
-        use_progress_bar = False
-    elif args.quiet:
-        config.logger.setLevel(logging.CRITICAL)
-        use_progress_bar = False
-    else:
-        config.logger.setLevel(logging.WARNING)
-        use_progress_bar = True
+    use_progress_bar = config.configure_verbosity(args)
 
     if args.cache_dir:
         os.environ["HF_HOME"] = args.cache_dir
