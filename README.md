@@ -93,6 +93,16 @@ While all of the scripts below can be invoked with models specified in the comma
 you can also set up your workflow by specifying Model A and Model B in *config.yml*,
 eliminating the need to specify models on the command line.
 
+In *config.yml* you can also set the default for parallelization (default is 4-way)
+as most of the scripts here fire up multiple threads to speed things up. If you want
+the legacy serial code it's still here, with scripts named "serial\_foobar.py."
+You can also change the parallelization using the -p (--parallel) option.
+
+The default for these scripts is to display a progress bar. If you want to see
+informational progress messages, use the -v (--verbose) option. If you want to
+suppress all output, use the -q (--quiet) option.  Warnings and errors will be
+displayed in all of these modes.
+
 ---
 
 ## Workflow
@@ -159,15 +169,6 @@ By default, the code displays a progress bar. You can display informational
 progress messages using the *-v / --verbose* option or you can suppress all
 information and progress bar using *-q / --quiet*.
 
-For large numbers of papers, there is a parallel version of *generate_mcqs* with a
-*-p / --parallel* option to specify the number of threads (default is 4).
-For example, to run 8-way parallel:
-   ```bash
-   python src/parallel_generate_mcqs.py -p 8
-   ```
-Other options *-v, -q, -m* work the same as with *generate_mcqs*.
-   
-
 ---
 
 ### 3. Combine multiple MCQ JSON files into a single file
@@ -183,12 +184,12 @@ the filename for your combined file (-o or --output) as shown here.
 
 ### 4. Select a Random Subset of MCQs for Further Processing (optional)
 If you want to randomly select a subset of MCQs from the generated JSON files, use 
-`select_mcqs_at_random.py`, specifying the number of MCQs to select.  For example, to select
-17 MCQs:
+`select_mcqs_at_random.py`, specifying the number of MCQs to select.
+For example, to select 17 MCQs:
 ```bash
 python src/select_mcqs_at_random.py -i MCQ-combined.json -o MCQ-subset.json -n 17
 ```
-Here you must specify the filenames for your combined and subset files as shown here.
+You must specify the filenames for your combined and subset files as shown here.
 
 ---
 
@@ -200,13 +201,8 @@ step:
 python src/generate_answers.py -i MCQ-subset.json
 ```
 
-If you have more than a handful of QA pairs you should use the parallel version:
-```bash
-python src/parallel_generate_answers.py -i MCQ-subset.json
-```
-
-For either version youy can specify a different model here using the -m (--model) option
-if you don't want to use the model specified in config.yml.:
+You can specify a different model here using the -m (--model) option
+if you don't want to use the model specified in config.yml. E.g.,:
 
 ```bash
 python src/generate_answers.py -i MCQ-subset.json \
@@ -215,10 +211,6 @@ python src/generate_answers.py -i MCQ-subset.json \
 Note the input shown here is `MCQ-subset.json` which assumes that you
 performed step 4; otherwise use `MCQ-combined.json` 
 (or whatever filename you used for output in step 3)
-
-As with *generare_mcqs.py* this code by default displays a progress bar.
-In -v / --verbose mode informational messages are displayed and in
--q / --quiet mode no output is displayed.
 
 ---
 
@@ -231,22 +223,13 @@ as *model\_b* in *config.yml*:
 python src/score_answers.py \
 ```
 
-Or if you have many answers to score, use the parallel version:
-```bash
-python src/parallel_score_answers.py \
-```
-This will run with default 4-way parallel. You can change that using -p *n* 
-or --parallel *n* where *n* is the number of threads you want to use.
-
-
-As with other scripts here, you can override *config.yml* settins and
- specify models in the command line, e.g.:
+You can override *config.yml* settings to specify models in the command line, e.g.,:
 ```bash
 python src/score_answers.py \
        -a 'alcf:meta-llama/Meta-Llama-3-70B-Instruct' \
        -b 'alcf:mistralai/Mistral-7B-Instruct-v0.3'
 ```
-As with previous steps, input and output directories default to the directories
+Input and output directories default to the directories
 specified in config.yml but can
 be overriden with -i (--input) and/or -o (--output)  on the command line. 
 - **Input:**  `_RESULTS/answers_<model-A>.json`
