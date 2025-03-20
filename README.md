@@ -46,6 +46,7 @@ and **scores** of those answers.
 7. Review the status of MCQ generation and scoring.
 
 
+
 ---
 
 ## Preparation Steps
@@ -106,6 +107,21 @@ displayed in all of these modes.
 ---
 
 ## Workflow
+
+The instructions below walk through the workflow, but you can also do the following:
+1. Define up to 4 models (minimum 2) in config.yml
+2. Run a shell script that performs all of the steps 1-6, making step 8 unnecessary:
+```
+./src/run\_workflow.py
+```
+
+The script runs each instance of generate\_answers.py and score\_answers.py at
+8-way parallel.  Additionally, the shell script runs these concurrently in the
+background, using the -q (--quiet) mode.
+
+The steps below are useful to underestand how each script works.
+
+Alternatively, you can follow the workflow below.
 
 ### 1. Convert PDFs to JSON
 Extract text from PDFs using a simple parser:
