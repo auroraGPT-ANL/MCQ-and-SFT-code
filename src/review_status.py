@@ -5,6 +5,7 @@ import requests
 import glob
 import subprocess
 
+from config import mcq_dir, results_dir
 from inference_auth_token import get_access_token
 alcf_access_token = get_access_token()
 from alcf_inference_utilities import get_names_of_alcf_chat_models, get_alcf_inference_service_model_queues
@@ -43,8 +44,8 @@ If a modelA has already been run once and scored with one modelB, it can be resc
 def main():
     import argparse
     parser = argparse.ArgumentParser(description='Program to run LLMs to generate and score answers to MCQs')
-    parser.add_argument('-i','--inputs', help='MCQ file', required=True)
-    parser.add_argument('-o','--outputdir', help='Directory to look for run results', required=True)
+    parser.add_argument('-i','--inputs', help='MCQ file (default: from config.yml)', default=mcq_dir)
+    parser.add_argument('-o','--outputdir', help='Directory to look for run results (default: from config.yml)', default=results_dir)
     parser.add_argument('-s','--silent', help='Just show things to run', action='store_true')
     parser.add_argument('-x','--execute', help='Execute commands', action='store_true')
     parser.add_argument('-m','--more', help='Also look at non-running/queued models', action='store_true')
