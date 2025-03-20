@@ -73,11 +73,12 @@ def load_config(file_path="config.yml"):
 _config = load_config()
 
 # --- Model dictionaries ---
-# Using a dictionary approach (each is a dict).
 model   = _config.get("model", {})
 model_b = _config.get("model_b", {})
+model_c = _config.get("model_c", {})
+model_d = _config.get("model_d", {})
 
-# --- In case the users does not define these in config.yml, we'll use these defaults
+# In case the users does not define these in config.yml, we'll use these defaults
 defaultModel = model.get("name", "alcf:meta-llama/Meta-Llama-3-70B-Instruct")
 defaultModelB = model_b.get("name", "alcf:mistralai/Mistral-7B-Instruct-v0.3")
 
