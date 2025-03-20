@@ -27,14 +27,14 @@ cd MCQ-and-SFT-code
 If you have trouble with any of these steps, go to the more detailed
 instructions below.
 
-Set up your working directories:
+1. Set up your working directories:
 ```bash
 mkdir _PAPERS _JSON _MCQ _RESULTS
 ```
 
-Copy your PDF format papers into _PAPERS.
+2. Copy your PDF format papers into _PAPERS.
 
-Update your conda environment with the dependencies needed here:
+3. Update your conda environment with the dependencies needed here:
 ```bash
 conda env update --name <your_conda_env> --file environment.yml
 ```
@@ -44,7 +44,7 @@ conda env create -f environment.yml
 conda activate globus_env
 ```
 
-Edit *config.yml* to specify the models you want to run.  Note
+4. Edit *config.yml* to specify the models you want to run.  Note
 you need to specify the location and the model name.  This code
 has been tested with alcf:(*model\_name*) and local.
 
@@ -52,14 +52,14 @@ Specify 2-4 models. The first (Model A) will be used to generate
 mcqs.  All models will then be used to generate answers and to
 score one anothers answers.
 
-Run the workflow (here we are telling the workflow to run the
-python scrips 12-way parallel)::
+5. Run the workflow (here we are telling the workflow to run the
+python scrips 12-way parallel):
 ```
 ./src/run_workflow.py -p 12
 ```
 ---
 
-### Workflow Overview
+### Workflow Detailed Overview
 This pipeline converts scientific papers in **PDF format** into JSON and then uses AI models
 of your choice to generate **multiple-choice questions (MCQs)**, **answers**,
 and **scores** of those answers.
