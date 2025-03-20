@@ -18,20 +18,24 @@ MODELS=("${(@f)$(python src/list_models.py -p 8)}")
 
 # Generate answers for each model
 for MODEL in "${MODELS[@]}"; do
-    echo "Generating answers with $MODEL..."
-    python src/generate_answers.py -i MCQ-combined.json -m "$MODEL" -p 8
+    echo "Begin generating answers with $MODEL..."
+    python src/generate_answers.py -i MCQ-combined.json -m "$MODEL" -q -p 8 &
 done
+
+wait
 
 echo "Step 4: Score answers between all models."
 # Score each model's answers using other models
 for MODEL_A in "${MODELS[@]}"; do
     for MODEL_B in "${MODELS[@]}"; do
         if [ "$MODEL_A" != "$MODEL_B" ]; then
-            echo "Scoring $MODEL_A answers using $MODEL_B..."
-            python src/score_answers.py -a "$MODEL_A" -b "$MODEL_B" -p 8
+            echo "Begin scoring $MODEL_A answers using $MODEL_B..."
+            python src/score_answers.py -a "$MODEL_A" -b "$MODEL_B" -q -p 8 &
         fi
     done
 done
+
+wait
 
 echo "Workflow completed."
 
