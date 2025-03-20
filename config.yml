@@ -38,7 +38,8 @@ model_b:
   Tokenizer:   "None"
 
 model_c:
-  name: "local:deepseek-r1-distill-llama-8b"
+  name:        "alcf:Qwen/Qwen2.5-7B-Instruct"
+  #name: "local:deepseek-r1-distill-llama-8b"
   #name: "openai:gpt-4"
   temperature: 0.7
   baseModel: "None"
