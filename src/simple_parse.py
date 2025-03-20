@@ -78,7 +78,7 @@ def process_directory(input_dir: str, output_dir: str = "output_files", use_prog
         out_file = basename + ".json"
         out_path = os.path.join(output_dir, out_file)
         if os.path.isfile(out_path):
-            config.logger.warning(f'Already exists: {i}/{total_files}: {out_path}')
+            config.logger.info(f'Already exists: {i}/{total_files}: {out_path}')
             pbar.update(1)
             continue
 
