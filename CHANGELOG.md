@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.1 - 20Mar2025 (CeC)
+- New shell (zsh) script that executes the entire workflow. The individual
+  python scripts are already paralell in their interactions with the models,
+  and the run\_workflow.py script runs those concurrently in the background,
+  as each instances is using a different model.
 ### v1.0 - 12Mar2025 (CeC)
 - Moved all scripts to parallel versions; parallel\_foobar.py now foobar.py
   and legacy scripts are renamed serial\_foobar.py

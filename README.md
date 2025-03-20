@@ -115,9 +115,15 @@ The instructions below walk through the workflow, but you can also do the follow
 ./src/run\_workflow.py
 ```
 
-The script runs each instance of generate\_answers.py and score\_answers.py at
-8-way parallel.  Additionally, the shell script runs these concurrently in the
-background, using the -q (--quiet) mode.
+This zsh script runs each instance of generate\_answers.py and score\_answers.py at
+8-way parallel by default, but you can modify with -p, so if you want these to run
+12-way parallel then:
+```
+./src/run\_workflow.py -p 12
+```
+Additionally, the shell script runs generate\_answers.py and score\_answers.py
+concurrently in the background, using the -q (--quiet) mode to suppress status 
+output from so many concurrent scripts running in the background.
 
 The steps below are useful to underestand how each script works.
 
