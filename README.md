@@ -112,14 +112,14 @@ The instructions below walk through the workflow, but you can also do the follow
 1. Define up to 4 models (minimum 2) in config.yml
 2. Run a shell script that performs all of the steps 1-6, making step 8 unnecessary:
 ```
-./src/run\_workflow.py
+./src/run_workflow.py
 ```
 
 This zsh script runs each instance of generate\_answers.py and score\_answers.py at
 8-way parallel by default, but you can modify with -p, so if you want these to run
 12-way parallel then:
 ```
-./src/run\_workflow.py -p 12
+./src/run_workflow.py -p 12
 ```
 Additionally, the shell script runs generate\_answers.py and score\_answers.py
 concurrently in the background, using the -q (--quiet) mode to suppress status 
