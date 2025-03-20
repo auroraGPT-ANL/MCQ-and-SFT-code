@@ -108,22 +108,33 @@ displayed in all of these modes.
 
 ## Workflow
 
-The instructions below walk through the workflow, but you can also do the following:
+### Bundled Workflow
+
+The instructions below walk through the workflow, showing how each script
+is used.  Alternatively, you can run the entire workflow at once:
+
 1. Define up to 4 models (minimum 2) in config.yml
-2. Run a shell script that performs all of the steps 1-6, making step 8 unnecessary:
+2. Run a shell script that performs all of the steps 1-6, making
+step 8 unnecessary:
 ```
 ./src/run_workflow.py
 ```
 
-This zsh script runs each instance of generate\_answers.py and score\_answers.py at
+This zsh script runs generate\_answers.py and score\_answers.py at
 8-way parallel by default, but you can modify with -p, so if you want these to run
 12-way parallel then:
 ```
 ./src/run_workflow.py -p 12
 ```
-Additionally, the shell script runs generate\_answers.py and score\_answers.py
+Additionally, the script runs generate\_answers.py and score\_answers.py
 concurrently in the background, using the -q (--quiet) mode to suppress status 
-output from so many concurrent scripts running in the background.
+output from so many concurrent scripts running in the background.  The speedup
+from running the python scrips in parallel is substantial.  Running these
+python scrips concurrently in the workflow adds another speedup. More than
+four models can certainly be done, but the script currently assumes only 4
+because for n models we run generate\_answers.py n times and
+score\_answers.py n(n-1) times.  The next iteration will remove the 4-model
+limit.
 
 The steps below are useful to underestand how each script works.
 
