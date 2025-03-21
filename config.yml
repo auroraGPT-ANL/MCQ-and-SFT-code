@@ -22,7 +22,7 @@ directories:
 # 
 
 model:
-  name: "alcf:meta-llama/Meta-Llama-3-70B-Instruct"
+  name: "alcf:meta-llama/Meta-Llama-3.1-405B-Instruct"
 #  name:        "local:deepseek-r1-distill-llama-8b"
   temperature:  0.7
   baseModel:   "None"
