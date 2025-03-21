@@ -273,7 +273,7 @@ class Model:
             except Exception as e:
                 if "401" in str(e) or "Unauthorized" in str(e):
                     sys.exit("Model API Authentication failed. Exiting.")
-                config.logger.warning(f"OpenAI/ALCF request error: {e}")
+                config.logger.info(f"OpenAI/ALCF request error: {e}")  # alert the user elsewhere if too many errs
                 return ""
 
         else:
