@@ -42,7 +42,7 @@ echo "Step 1: Convert PDF to JSON."
 python src/simple_parse.py
 
 echo "Step 1: Generate MCQs (${ALIASES[1]})."
-python src/generate_mcqs.py -p 1
+python src/generate_mcqs.py -p "$p_value"
 
 echo "Step 2: Combine JSON files."
 python src/combine_json_files.py -o MCQ-combined.json
@@ -70,3 +70,4 @@ done
 wait
 
 echo "Workflow completed."
+
