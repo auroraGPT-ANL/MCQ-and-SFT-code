@@ -268,7 +268,7 @@ class Model:
                 generated_text = response.choices[0].message.content.strip()
                 return generated_text
             except APITimeoutError as e:
-                config.logger.warning(f"OpenAI/ALCF request timed out: {e}")
+                config.logger.info(f"OpenAI/ALCF request timed out: {e}") #not fatal so don't clutter
                 return ""
             except Exception as e:
                 if "401" in str(e) or "Unauthorized" in str(e):
