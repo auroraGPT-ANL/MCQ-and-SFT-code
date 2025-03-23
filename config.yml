@@ -22,7 +22,7 @@ directories:
 # 
 
 model:
-  name: "alcf:meta-llama/Meta-Llama-3.1-405B-Instruct"
+  name:        "alcf:mistralai/Mistral-7B-Instruct-v0.3"
 #  name:        "local:deepseek-r1-distill-llama-8b"
   temperature:  0.7
   baseModel:   "None"
@@ -32,13 +32,13 @@ model:
 
 model_b:
 #  name:        "local:deepseek-r1-distill-llama-8b"
-  name:        "alcf:mistralai/Mistral-7B-Instruct-v0.3"
+  name:        "alcf:meta-llama/Meta-Llama-3-70B-Instruct"
   temperature:  0.7
   baseModel:   "None"
   Tokenizer:   "None"
 
 model_c:
-  name:        "alcf:Qwen/Qwen2.5-7B-Instruct"
+  name:        "alcf:meta-llama/Meta-Llama-3-8B-Instruct"
   #name: "local:deepseek-r1-distill-llama-8b"
   #name: "openai:gpt-4"
   temperature: 0.7
