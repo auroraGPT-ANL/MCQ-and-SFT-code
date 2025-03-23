@@ -44,18 +44,37 @@ def human_readable_time(seconds: float) -> str:
         return f"{days:.2f} days"
 
 
-def approximate_total_chunks(input_dir, bytes_per_chunk=CHUNK_SIZE):
-    """
-    Returns an approximate total chunk count by summing file sizes
-    of .json or .jsonl files and dividing by `bytes_per_chunk`.
-    """
-    total_bytes = 0
+def approximate_total_chunks(input_dir, output_dir, chunk_size=CHUNK_SIZE):
+    total_chunks = 0
     for f in os.listdir(input_dir):
-        if f.lower().endswith((".json", ".jsonl")):
-            path = os.path.join(input_dir, f)
-            size = os.stat(path).st_size
-            total_bytes += size
-    return total_bytes // bytes_per_chunk
+        if not f.lower().endswith((".json", ".jsonl")):
+            continue
+        output_file = os.path.join(output_dir, f"processed_{f}")
+        if os.path.exists(output_file):
+            continue
+        path = os.path.join(input_dir, f)
+        try:
+            with open(path, 'r', encoding='utf-8') as file:
+                if f.lower().endswith(".json"):
+                    json_str = file.read()
+                    lines = [json_str]
+                else:
+                    lines = file.readlines()
+                
+                for line in lines:
+                    try:
+                        record = json.loads(line.strip())
+                        text = record.get('text')
+                        if text:
+                            chunks = split_text_into_chunks(text, chunk_size)
+                            total_chunks += len(chunks)
+                    except json.JSONDecodeError as e:
+                        config.logger.info(f"JSON decode error in file {f}: {e}")
+                        continue
+        except Exception as e:
+            config.logger.error(f"Failed to read file {path}: {e}")
+            continue
+    return total_chunks
 
 
 def split_text_into_chunks(text: str, chunk_size: int = CHUNK_SIZE) -> list:
@@ -269,7 +288,8 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
     overall_start_time = time.time()
 
     if json_files:
-        approximate_chunk_count = approximate_total_chunks(input_dir, bytes_per_chunk=CHUNK_SIZE)
+        approximate_chunk_count = approximate_total_chunks(input_dir, output_dir, chunk_size=CHUNK_SIZE)
+
         config.logger.info(f"\nTotal JSON files: {total_files}, ~{int(0.8 * approximate_chunk_count)}-{approximate_chunk_count} chunks\n")
     else:
         approximate_chunk_count = sum(1 for _ in open(os.path.join(input_dir, jsonl_files[0]), 'r', encoding='utf-8'))
@@ -341,10 +361,10 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
         pbar_total.close()
         pbar_success.close()
 
-    # Write out results grouped by file
+# Write out results grouped by file
     os.makedirs(output_dir, exist_ok=True)
-    for i, (fname, qa_pairs) in enumerate(file_results.items(), start=1):
-        out_file = os.path.join(output_dir, f'file_{i}.json')
+    for fname, qa_pairs in file_results.items():
+        out_file = os.path.join(output_dir, f'processed_{fname}')
         config.logger.info(f"Writing output for file {fname} with {len(qa_pairs)} MCQs to {out_file}")
         try:
             with open(out_file, 'w', encoding='utf-8') as out_f:
