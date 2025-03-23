@@ -1,7 +1,6 @@
 #!/bin/zsh
 
-# Default value for parameter p (number of threads for generate_mcqs.py,
-# generate_answers.py, and score_answers.py)
+# Default value for parameter p (number of threads for generate_mcqs.py, generate_answers.py, and score_answers.py)
 p_value=8
 v_flag=""
 
@@ -24,7 +23,7 @@ done
 # Exit on any error
 set -e
 
-# Get models from config.yml using the dynamic value for -p
+# List models from config.yml using the dynamic value for -p
 MODELS=("${(@f)$(python src/list_models.py -p "$p_value")}")
 
 # Define aliases for up to 4 models (always at least two models)
