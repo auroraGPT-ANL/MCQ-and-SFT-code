@@ -61,7 +61,7 @@ def process_directory(input_dir: str, output_dir: str = "output_files", use_prog
     ]
     total_files = len(files)
     if total_files == 0:
-        config.logger.warning("No suitable files found in directory.")
+        config.logger.warning(f"No PDF papers found in {input_dir}.")
         return
 
     # Create progress bar if use_progress_bar is True

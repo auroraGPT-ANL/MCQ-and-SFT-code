@@ -282,7 +282,7 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
     total_files = len(all_files)
 
     if total_files == 0:
-        config.logger.warning("No suitable files found in directory.")
+        config.logger.warning(f"No JSON files found in {input_dir}.")
         return
 
     overall_start_time = time.time()
