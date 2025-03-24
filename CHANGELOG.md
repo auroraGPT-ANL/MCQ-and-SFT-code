@@ -1,19 +1,26 @@
 # Changelog
 
+### v1.3 - 24Mar2025 (CeC)
+- Add option to run\_workflow.sh to select subset of MCQs. 
+- Improved some of the error messages to give the user more useful information.
+
 ### v1.2 - 21Mar2025 (CeC)
 - Major restructure of generate\_mcqs.py to (a) use two pbars to track both
   chunks processed and successful chunks, (b) warn the user if success rate
   drops below 50% (for whatever reason), and (c) parallelize by chunk rather than
   file, to achieve performance improvement with small number of files.
+
 ### v1.1 - 20Mar2025 (CeC)
 - New shell (zsh) script that executes the entire workflow. The individual
   python scripts are already paralell in their interactions with the models,
   and the run\_workflow.py script runs those concurrently in the background,
-  as each instances is using a different model.
+  (i.e., in parallel) as each instances is using a different model.
+
 ### v1.0 - 12Mar2025 (CeC)
 - Moved all scripts to parallel versions; parallel\_foobar.py now foobar.py
   and legacy scripts are renamed serial\_foobar.py
 - implemented pbar, -v, and -q logic for simple\_parse
+
 ### v0.b - 12Mar2025 (CeC)
 - moved logic to decide on -v, -q, or pbar into config.yml
 - created parallel version of score\_answers
