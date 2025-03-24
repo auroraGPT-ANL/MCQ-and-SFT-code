@@ -3,9 +3,10 @@
 # Default value for parameter p (number of threads for generate_mcqs.py, generate_answers.py, and score_answers.py)
 p_value=8
 v_flag=""
+n_value=""
 
 # Parse command line options
-while getopts "p:v" opt; do
+while getopts "p:vn:" opt; do
   case $opt in
     p)
       p_value="$OPTARG"
@@ -13,8 +14,11 @@ while getopts "p:v" opt; do
     v)
       v_flag="-v"
       ;;
+    n)
+      n_value="$OPTARG"
+      ;;
     *)
-      echo "Usage: $0 [-p value] [-v]"
+      echo "Usage: $0 [-p value] [-v] [-n number]"
       exit 1
       ;;
   esac
@@ -35,7 +39,7 @@ ALIASES[4]="Model D"
 # List the models at the start of the script
 echo "Models to be used:"
 if (( ${#MODELS[@]} > 0 )); then
-  echo "  ${ALIASES[1]} : ${MODELS[1]} (used for generating MCQs)"
+  echo "  ${ALIASES[1]}: ${MODELS[1]} (used for generating MCQs)"
   for (( i=2; i<=${#MODELS[@]}; i++ )); do
     echo "  ${ALIASES[i]}: ${MODELS[i]}"
   done
@@ -50,11 +54,20 @@ python src/generate_mcqs.py -p "$p_value" $v_flag
 echo "Step 2: Combine JSON files."
 python src/combine_json_files.py -o MCQ-combined.json
 
+# If -n is specified, select a subset of MCQs at random
+if [ -n "$n_value" ]; then
+    echo "Selecting $n_value MCQs at random..."
+    python src/select_mcqs_at_random.py -i MCQ-combined.json -o MCQ-subset.json -n "$n_value"
+    input_file="MCQ-subset.json"
+else
+    input_file="MCQ-combined.json"
+fi
+
 echo "Step 3: Generate answers (all models)."
 # Generate answers for each model using the dynamic value for -p
 for (( i=1; i<=${#MODELS[@]}; i++ )); do
     echo "Begin generating answers with ${ALIASES[i]}..."
-    python src/generate_answers.py -i MCQ-combined.json -m "${MODELS[i]}" -q -p "$p_value" $v_flag &
+    python src/generate_answers.py -i "$input_file" -m "${MODELS[i]}" -q -p "$p_value" $v_flag &
 done
 
 wait
