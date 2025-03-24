@@ -52,11 +52,41 @@ Specify 2-4 models. The first (Model A) will be used to generate
 mcqs.  All models will then be used to generate answers and to
 score one anothers answers.
 
-5. Run the workflow (here we are telling the workflow to run the
-python scrips 12-way parallel):
+5.  You can run the entire workflow by invoking the shell script:
+*./src/run_workflow.sh [options]*.  The available command-line options are:
+
+* -p <value>
+Specifies the number of threads or parallel processes to use for MCQ generation,
+answer generation, and scoring. Default is 8. For example, to run with
+12-way parallelism:
+./src/run_workflow.sh -p 12
+
+* -v
+Enables verbose mode, which may display additional logging or debugging
+messages during the execution of various Python scripts.
+
+* -n <integer>
+Specifies how many MCQs to randomly select after combining the
+MCQ output files. If set, the script will create a smaller subset
+(named MCQ-subset.json) containing
+<integer> random MCQs and then use that subset for answer generation. If
+omitted, **all** MCQs in MCQ-combined.json will be used.
+
+Example Commands:
+
+Run the entire workflow with 8 threads (the default) and verbose mode
 ```
-./src/run_workflow.py -p 12
+./src/run_workflow.sh -v
 ```
+Run the entire workflow with 12 threads, selecting 20 random MCQs
+```
+./src/run_workflow.sh -p 12 -n 20
+```
+Run the entire workflow with 4 threads, using all MCQs (no subset), no verbose logging
+```
+./src/run_workflow.sh -p 4
+```
+
 ---
 
 ### Workflow Detailed Overview
