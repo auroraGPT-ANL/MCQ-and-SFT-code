@@ -7,6 +7,291 @@ Here we describe Python programs for:
 
 Please email {foster|stevens|catlett}@anl.gov if you see things that are unclear or missing.
 
+## Set up to access ALCF Inference Service 
+
+**Before you start:** We recommend you follow the instructions for 
+[ALCF Inference Service Prerequisites](https://github.com/argonne-lcf/inference-endpoints?tab=readme-ov-file#%EF%B8%8F-prerequisites)
+to set up your ALCF auth token, required to access models via the inference service.
+(You need to download and run `inference_auth_token.py`.
+
+## Code for generating and evaluating MCQs
+
+Clone this repository.
+```bash
+git clone git@github.com:auroraGPT-ANL/MCQ-and-SFT-code.git
+cd MCQ-and-SFT-code
+```
+
+### Shortcut Version of the below
+
+If you have trouble with any of these steps, go to the more detailed
+instructions below.
+
+1. Set up your working directories:
+```bash
+mkdir _PAPERS _JSON _MCQ _RESULTS
+```
+
+2. Copy your PDF format papers into _PAPERS.
+
+3. Update your conda environment with the dependencies needed here:
+```bash
+conda env update --name <your_conda_env> --file environment.yml
+```
+**or** create a new Conda environment to run this code:
+```bash
+conda env create -f environment.yml
+conda activate globus_env
+```
+
+4. Edit *config.yml* to specify the models you want to run.  Note
+you need to specify the location and the model name.  This code
+has been tested with alcf:(*model\_name*) and local.
+
+Specify 2-4 models. The first (Model A) will be used to generate
+mcqs.  All models will then be used to generate answers and to
+score one anothers answers.
+
+5.  You can run the entire workflow by invoking the shell script:
+*./src/run_workflow.sh [options]*.  The available command-line options are:
+
+* -p <value>
+Specifies the number of threads or parallel processes to use for MCQ generation,
+answer generation, and scoring. Default is 8. For example, to run with
+12-way parallelism:
+./src/run_workflow.sh -p 12
+
+* -v
+Enables verbose mode, which may display additional logging or debugging
+messages during the execution of various Python scripts.
+
+* -n <integer>
+Specifies how many MCQs to randomly select after combining the
+MCQ output files. If set, the script will create a smaller subset
+(named MCQ-subset.json) containing
+<integer> random MCQs and then use that subset for answer generation. If
+omitted, **all** MCQs in MCQ-combined.json will be used.
+
+Example Commands:
+
+Run the entire workflow with 8 threads (the default) and verbose mode
+```
+./src/run_workflow.sh -v
+```
+Run the entire workflow with 12 threads, selecting 20 random MCQs
+```
+./src/run_workflow.sh -p 12 -n 20
+```
+Run the entire workflow with 4 threads, using all MCQs (no subset), no verbose logging
+```
+./src/run_workflow.sh -p 4
+```
+
+---
+
+### Workflow Detailed Overview
+This pipeline converts scientific papers in **PDF format** into JSON and then uses AI models
+of your choice to generate **multiple-choice questions (MCQs)**, **answers**,
+and **scores** of those answers.
+
+**Preparation Steps:**
+
+ -  Set up your working directory
+ -  Set up and activate your Conda environment
+
+**Workflow Steps:**
+
+[**(flowchart)**](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/CeC/MCQ-Workflow.png)
+
+1. Convert PDFs (papers) to JSON representations.
+2. Generate MCQs from JSON representations.
+3. Combine multiple MCQ JSON files into a single file
+4. Select a subset of MCQs.
+5. Generate additonal  answers for MCQs (using a different model than
+   used to generate the initial MCQs and answers).
+6. Score AI-generated answers using another AI model.
+7. Review the status of MCQ generation and scoring.
+
+---
+
+
+## Preparation Steps
+
+#### Set Up Your Working Directory
+Ensure your working directory has subdirectories for storing input and output files. The names
+of files and folders don't matter, but these are the names specified in config.yml.  If you want
+to place data elsewhere, update the directories secion in `config.yml`
+if you are just starting out, use these and you can copy/paste the steps).
+
+- `_PAPERS/`  → **original PDF papers**.
+- `_JSON/`    → **parsed text in JSON format**.
+- `_MCQ/`     → **generated MCQs in JSON format**.
+- `_RESULTS/` → **AI-generated answers and scores**.
+
+If you're just starting (and don't already have these or equivalent directories),
+, create these directories manually. If yours are named differently, substitute your
+directory names in `config.yml`
+```bash
+mkdir _PAPERS _JSON _MCQ _RESULTS
+```
+(**Note:** Some of the scripts below create their output directories automatically if they don't
+already exist, but we will create them just to be sure..)
+
+Put your papers (in PDF form) in **_PAPERS**.
+
+#### Set Up and Activate Your Conda Environment
+If you already have a Conda environment you want to keep using, update it with 
+any missing dependencies needed for this workflow:
+```bash
+conda env update --name <your_conda_env> --file environment.yml
+```
+Otherwise, create a new Conda environment:
+```bash
+conda env create -f environment.yml
+conda activate globus_env
+```
+(**Note:** If you get `CondaValueError: prefix already exists`, edit`environment.yml` and change the `name:`,
+then create and activate that env.)
+
+#### Set up your *config.yml* file
+
+We have already seen *config.yml* above with respect to default directories.
+While all of the scripts below can be invoked with models specified in the command line, 
+you can also set up your workflow by specifying Model A and Model B in *config.yml*,
+eliminating the need to specify models on the command line.
+
+In *config.yml* you can also set the default for parallelization (default is 4-way)
+as most of the scripts here fire up multiple threads to speed things up. If you want
+the legacy serial code it's still here, with scripts named "serial\_foobar.py."
+You can also change the parallelization using the -p (--parallel) option.
+
+The default for these scripts is to display a progress bar. If you want to see
+informational progress messages, use the -v (--verbose) option. If you want to
+suppress all output, use the -q (--quiet) option.  Warnings and errors will be
+displayed in all of these modes.
+
+---
+
+## Workflow
+
+### Bundled Workflow
+
+The instructions below walk through the workflow, showing how each script
+is used.  Alternatively, you can run the entire workflow at once:
+
+1. Define up to 4 models (minimum 2) in config.yml
+2. Run a shell script that performs all of the steps 1-6, making
+step 8 unnecessary:
+```
+./src/run_workflow.py
+```
+
+### Below this point the paths, etc. are outdated and need to be fixed
+
+## Additional Notes
+- This pipeline ensures **high-quality multiple-choice questions** are generated and scored using AI.
+- The steps allow for **comparison of AI-generated answers against reference answers**.
+- The scoring step provides a **numerical evaluation (1-10)** of answer accuracy.
+
+**Note:**
+* You need a file *openai_access_token.txt* that contains your OpenAI access token if you
+are to use an OpenAI model like *gpt-4o*.
+
+Examples of running *generate_answers.py*:
+* `python src/generate_answers.py -o ../_RESULTS -i ../_MCQ -m openai:o1-mini.json`
+  * Uses the OpenAI model `o1-mini` to generate answers for MCQs in `MCQs.json` and stores results in the `_RESULTS` directory, in a file named `answers_openai:o1-mini.json`
+* `python src/generate_answers.py -o ../_RESULTS -i MCQs.json -m "pb:argonne-private/AuroraGPT-IT-v4-0125`
+  * Uses the Huggingface model `argonne-private/AuroraGPT-IT-v4-0125`, running on a Polaris compute node started via PBS, to generate answers for the same MCQs. Results are placed in `_RESULTS/answers_pb:argonne-private+AuroraGPT-IT-v4-0125.json`
+ 
+Examples of running `score_answers.py`:
+* `python score_answers.py -o _RESULTS -i MCQs.json -a openai:o1-mini.json -b openai:gpt-4o`
+  * Uses the OpenAI model `gpt-4o` to score answers for MCQs in `MCQs.json` and stores results in `_RESULTS` directory, in a file named `answers_openai:o1-mini.json`
+* `python score_answers.py -o _RESULTS -a pb:argonne-private/AuroraGPT-IT-v4-0125 -b openai:gpt-4o`
+  * Uses the OpenAI model gpt-4o to score answers previously generated for model `pb:argonne-private/AuroraGPT-IT-v4-0125`, and assumed to be located in a file `_RESULTS/answers_pb:argonne-private+AuroraGPT-IT-v4-0125.json`, as above. Places results in file `_RESULTS/scores_pb:argonne-private+AuroraGPT-IT-v4-0125:openai:gpt-4o.json`.
+ 
+
+## Notes on different model execution locations
+The class `Model` (in `model_access.py`) implements init and run methods that allow for use of different models. 
+```
+model = Model(modelname)
+response = model.run(user_prompt='Tell me something interesting')
+```
+where `modelname` has a prefix indicating the model type/location:
+* **alcf**: Model served by the ALCF Inference Service. You need an ALCF project to charge to.
+* **hf**: Huggingface model downloaded and run on Polaris login node (not normally a good thing).
+* **pb**: Huggingface model downloaded and run on a Polaris compute node. You need an ALCF project to charge to.
+* **vllm**: Huggingface model downloaded and run via VLLM on Polaris compute node. Not sure that works at present.
+* **openai**: An OpenAI model, like gpt-4o or o1-mini. You need an OpenAI account to charge to.
+
+
+## Code for fine-tuning programs
+```
+# LORA fine-tuning
+python lora_fine_tune.py -i <json-file> -o <model-directory>
+
+# Full fine tune
+python full_fine_tune.py -i <json-file> -o <model-directory>
+```
+Note:
+* You need a file `hf_access_token.txt` if you want to publish models to HuggingFace.
+* You need to edit the file to specify where to publish models in HuggingFace
+* We are still debugging how to download and run published models
+
+## Code for other useful things
+
+Determine what models are currently running on ALCF inference service (see below for more info)
+```
+python check_alcf_service_status.py
+```
+Determine what answers have been generated and scored, and what additional runs could be performed, _given running models_, to generate and score additional answers. (You may want to submit runs to start models. Use `-m` flag to see what could be useful to submit.) 
+```
+python review_status.py -o <result-directory>
+```
+Perform runs of `generate_answers` and `grade_answers.py` to generate missing outputs. (See below for more info)
+```
+python run_missing_generates.py -o <result-directory>
+```
+
+### More on `check_alcf_service_status.py` 
+
+The program `check_alcf_service_status.py` retrieves and processes status information from the
+[ALCF Inference service](https://github.com/argonne-lcf/inference-endpoints),
+and lists models currently running or queued to run. E.g., as follows, which shows six
+models running and one queued. Models that are not accessed for some period are shut
+down and queued models started. A request to a model that is not running adds it to the queue.
+```
+% python check_alcf_service_status.py
+Running: ['meta-llama/Meta-Llama-3-70B-Instruct', 'meta-llama/Meta-Llama-3-8B-Instruct', 'mistralai/Mistral-7B-Instruct-v0.3']
+Starting: ['N/A']
+Queued : []
+```
+Note:
+* You need a valid ALCF access token stored in a file `alcf_access_token.txt`.  See [how to generate an ALCF access token](https://github.com/argonne-lcf/inference-endpoints?tab=readme-ov-file#authentication).
+* Here is a list of [models supported by the ALCF inference service](https://github.com/argonne-lcf/inference-endpoints?tab=readme-ov-file#-available-models).
+* "N/A" is a test model used by ALCF, it can be ignored.
+
+### More on `run_missing_generates.py`
+
+The ALCF inference service hosts many models, as [listed here](https://github.com/argonne-lcf/inference-endpoints?tab=readme-ov-file#-available-models). At any one time, zero or more *running*, zero or more are *queued*, and the rest are neither running not queued. (See below for how to use `check_alcf_service_status.py` to determine which.)
+You may want to run against all available models. To do so, you can specify `-a all`, which works out what commands are needed to process specified MCQs with all *running models*. Adding `-q` also considers *queued models*, and `-s` *non-running models*. For example, when I ran the following command I was informed of the commands to run three models for which results are not found:
+```
+% python run_missing_generates.py -i 100-papers-qa.json -o output_files -a all -m 100 -s
+python generate_and_grade_answers.py -i 100-papers-qa.json -o outputs -a 'Qwen/Qwen2-VL-72B-Instruct' -b 'gpt-4o' -c -q -s 0 -e 100
+python generate_and_grade_answers.py -i 100-papers-qa.json -o outputs -a 'deepseek-ai/DeepSeek-V3' -b 'gpt-4o' -c -q -s 0 -e 100
+python generate_and_grade_answers.py -i 100-papers-qa.json -o outputs -a 'mgoin/Nemotron-4-340B-Instruct-hf' -b 'gpt-4o' -c -q -s 0 -e 100
+```
+
+`run_missing_generates.py` has options as
+
+# Code for Creating and Scoring Multiple Choice Questions (MCQs) from Papers
+
+Here we describe Python programs for:
+* Generating and evaluating MCQs
+* Fine-tuning models based on supplied data
+* Other useful things
+
+Please email {foster|stevens|catlett}@anl.gov if you see things that are unclear or missing.
+
 This pipeline converts scientific papers in **PDF format** into JSON and then uses AI models
 of your choice to generate **multiple-choice questions (MCQs)**, **answers**,
 and **scores** of those answers.
