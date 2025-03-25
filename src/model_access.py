@@ -276,6 +276,14 @@ class Model:
                 config.logger.info(f"OpenAI/ALCF request error: {e}")  # alert the user elsewhere if too many errs
                 return ""
 
+        elif model_name.startswith('argo:'):
+            self.model_name = model_name.split('argo:')[1]
+            config.logger.info(f"Argo model to be run at Argo Proxy: {self.model_name}")
+            self.model_type = 'ArgoProxy'
+            self.key = "fake-argo-key"
+            self.endpoint = 'http://127.0.0.1:8000/v1'
+
+
         else:
             config.logger.warning(f"Unknown model type: {self.model_type}")
             sys.exit(1)
