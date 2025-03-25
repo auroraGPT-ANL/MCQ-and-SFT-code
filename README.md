@@ -37,6 +37,13 @@ conda env create -f environment.yml
 conda activate globus_env
 ```
 
+4. **Populate \_PAPERS**
+Place PDF-formatted input materials (e.g., scientific papers) into \_PAPERS.
+
+5. **Set up configuration:**
+Edit *config.yml* to specify at least two and up to four models you wish to use.
+(see **Configuration** notes below)
+
 ### Workflow Overview
 
 This pipeline converts scientific papers in PDF format into JSON and then uses AI models to:
