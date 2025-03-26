@@ -3,6 +3,7 @@
 import os
 import yaml
 import logging
+import signal
 
 # Set up a unique logger.
 logger = logging.getLogger("MCQGenerator")
@@ -12,6 +13,16 @@ if not logger.handlers:
     formatter = logging.Formatter("%(levelname)s: %(message)s")
     ch.setFormatter(formatter)
     logger.addHandler(ch)
+
+# Global flag for graceful shutdown.
+bail_out = False
+
+def handle_sigint(signum, frame):
+    global bail_out
+    bail_out = True
+    logger.info("Interrupt received: setting bail_out flag to True.")
+
+signal.signal(signal.SIGINT, handle_sigint)
 
 # add a "no op" progress bar for quiet mode
 class NoOpTqdm:
