@@ -141,7 +141,7 @@ class Model:
             config.logger.info(f"Rick's Cafe Inference Service Model: {self.model_name}")
 
             # For now, simply set the token to a placeholder
-            token = "EMPTY"
+            token = "CELS"
             self.model_type = 'CAFE'
             self.endpoint   = 'https://66.55.67.65/v1'
             self.key        = token
