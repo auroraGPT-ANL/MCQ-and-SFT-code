@@ -138,11 +138,6 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
     chunk_success = False
     qa_pair = None
 
-# Check the global bail flag before starting processing.
-    if config.bail_out:
-        config.logger.info("Bailing out due to user interrupt.")
-        return (filename, linenum, chunknum, None, False)
-
     # Log the start of processing this chunk
     config.logger.info(f"Processing chunk {chunknum} in file {filename}.")
 
