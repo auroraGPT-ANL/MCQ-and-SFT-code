@@ -118,10 +118,10 @@ def update_shared_counters(is_success, shared_counters, counter_lock):
             if ratio < 0.5:
                 config.logger.error(
                     f"Success rate <50% ({shared_counters['success']}/{total}).\n"
-                    f"       To bail, hit ^C multiple times to abort all threads.\n"
                     f"       Run with -v (--verbose) to investigate."
                 )
-                sys.exit(1)
+                config.initiate_shutdown("Initiating shutdown.")
+                #sys.exit(1)
 
 
 def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
@@ -416,6 +416,7 @@ if __name__ == "__main__":
                           use_progress_bar=use_progress_bar,
                           parallel_workers=args.parallel)
     except KeyboardInterrupt:
-        print("EXIT: Execution interrupted by user")
-        sys.exit(0)
+        #print("EXIT: Execution interrupted by user")
+        config.initiate_shutdown("User Interrupt - initiating shutdown.")
+        #sys.exit(0)
 

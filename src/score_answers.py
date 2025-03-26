@@ -154,7 +154,8 @@ def main():
     config.logger.info(f'Looking for {answer_file}')
     if not os.path.exists(answer_file):
         config.logger.error(f'No answers file for {modelA_name}')
-        sys.exit(1)
+        config.initiate_shutdown("Initiating shutdown.")
+        #sys.exit(1)
 
     score_file = os.path.join(
         output_dir,
@@ -162,7 +163,8 @@ def main():
     )
     if os.path.exists(score_file) and not args.force:
         config.logger.error(f"Score file already exists: {score_file}")
-        sys.exit(1)
+        config.initiate_shutdown("Initiating shutdown.")
+        #sys.exit(1)
 
     #with open(answer_file, "r", encoding="utf-8") as f:
     #    data = json.load(f)
@@ -240,6 +242,7 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        config.logger.warning("EXIT: Execution interrupted by user")
-        sys.exit(0)
+        #config.logger.warning("EXIT: Execution interrupted by user")
+        config.initiate_shutdown("User interrupt - initiating shutdown.")
+        #sys.exit(0)
 

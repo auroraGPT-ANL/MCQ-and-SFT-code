@@ -94,7 +94,8 @@ def main():
             data = json.load(f)
     except Exception as e:
         config.logger.error(f"ERROR: File {json_file} not found or could not be read: {e}")
-        sys.exit(0)
+        config.initiate_shutdown("Initiating shutdown.")
+        #sys.exit(0)
 
     start_index = int(args.start)
     if args.end == 'all':

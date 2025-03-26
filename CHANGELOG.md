@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.4 - 26Mar2025 (CeC)
+- Implemented a global "bail out" flag and checks before iniating new threads so that
+  one can abort without having to hammer ^C multiple times, and so that fatal errors
+  like model access fails can cause a shut-down withous user intervention.
+
 ### v1.3 - 24Mar2025 (CeC)
 - Add option to run\_workflow.sh to select subset of MCQs. 
 - Improved some of the error messages to give the user more useful information.
