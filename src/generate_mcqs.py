@@ -138,6 +138,12 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
     chunk_success = False
     qa_pair = None
 
+   # New code to check if shutdown has been requested
+    if config.bail_out:
+        config.logger.info(f"Graceful shutdown: Skipping chunk {chunknum} in file {filename}.")
+        return (filename, linenum, chunknum, None, False)
+
+
     # Log the start of processing this chunk
     config.logger.info(f"Processing chunk {chunknum} in file {filename}.")
 
@@ -339,6 +345,10 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
                 chunks = split_text_into_chunks(text, CHUNK_SIZE)
                 # For each chunk in this record, submit a task
                 for chunknum, chunk in enumerate(chunks, start=1):
+                    if config.bail_out:
+                        config.logger.info("Shutdown in progress: stopping submission of new tasks (chunk loop).")
+                        break
+
                     future = executor.submit(process_chunk, model, filename, rec_path,
                                              linenum, chunknum, chunk,
                                              pbar_total, pbar_success,

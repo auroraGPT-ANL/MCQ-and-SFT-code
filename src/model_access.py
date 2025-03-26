@@ -76,7 +76,8 @@ class Model:
             response = self.client_socket.recv(1024).decode()
             if response != 'ok':
                 config.logger.warning(f"Unexpected response: {response}")
-                sys.exit(1)
+                config.initiate_shutdown("Initiating shutdown.")
+                #sys.exit(1)
             config.logger.info("Model server initialized")
 
         elif model_name.startswith('hf:'):
@@ -125,10 +126,26 @@ class Model:
             alcf_chat_models = get_names_of_alcf_chat_models(token)
             if self.model_name not in alcf_chat_models:
                 config.logger.warning(f"Bad ALCF model: {self.model_name}")
-                sys.exit(1)
+                config.initiate_shutdown("Initiating shutdown.")
+                #sys.exit(1)
             self.model_type = 'ALCF'
             self.endpoint   = 'https://data-portal-dev.cels.anl.gov/resource_server/sophia/vllm/v1'
             self.key        = token
+
+        # models Rick and Tom are running...
+        elif model_name.startswith('cafe'):
+            """
+            Use Rick's Cafe Inference Service endpoint
+            """
+            self.model_name = model_name.split('cafe:')[1]
+            config.logger.info(f"Rick's Cafe Inference Service Model: {self.model_name}")
+
+            # For now, simply set the token to a placeholder
+            token = "EMPTY"
+            self.model_type = 'CAFE'
+            self.endpoint   = 'https://66.55.67.65/v1'
+            self.key        = token
+
 
         elif model_name.startswith('openai'):
             """
@@ -143,7 +160,8 @@ class Model:
 
         else:
             config.logger.warning(f"Bad model: {model_name}")
-            sys.exit(1)
+            config.initiate_shutdown("Initiating shutdown.")
+            #sys.exit(1)
 
     def wait_for_job_to_start(self):
         """Monitor job status and get assigned compute node"""
@@ -246,7 +264,8 @@ class Model:
                 return message
             except Exception as e:
                 config.logger.warning(f'Exception: {e}')
-                sys.exit(1)
+                config.initiate_shutdown("Initiating shutdown.")
+                #sys.exit(1)
 
         elif self.model_type in ['OpenAI', 'ALCF']:
             # Chat completions via openai or ALCF
@@ -272,21 +291,43 @@ class Model:
                 return ""
             except Exception as e:
                 if "401" in str(e) or "Unauthorized" in str(e):
-                    sys.exit("Model API Authentication failed. Exiting.")
+                    config.initiate_shutdown("Model API Authentication failed. Exiting.")
+                    #sys.exit("Model API Authentication failed. Exiting.")
                 config.logger.info(f"OpenAI/ALCF request error: {e}")  # alert the user elsewhere if too many errs
                 return ""
 
-        elif model_name.startswith('argo:'):
-            self.model_name = model_name.split('argo:')[1]
-            config.logger.info(f"Argo model to be run at Argo Proxy: {self.model_name}")
-            self.model_type = 'ArgoProxy'
-            self.key = "fake-argo-key"
-            self.endpoint = 'http://127.0.0.1:8000/v1'
-
+        elif self.model_type == 'CAFE':
+                # Handle CAFE models similarly to vLLM
+                data = {
+                    "model": self.model_name,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user",   "content": user_prompt}
+                    ],
+                    "temperature": temperature
+                }
+                try:
+                    config.logger.info(
+                        f'Running {self.endpoint}\n'
+                        f'  Headers = {self.headers}\n'
+                        f'  Data = {json.dumps(data)}'
+                    )
+                    resp = requests.post(self.endpoint, headers=self.headers, data=json.dumps(data))
+                    config.logger.info(f"Raw response: {resp}")
+                    response_json = resp.json()
+                    config.logger.info(f"Parsed JSON: {response_json}")
+                    message = response_json['choices'][0]['message']['content']
+                    config.logger.info(f"Response message: {message}")
+                    return message
+                except Exception as e:
+                    config.logger.warning(f'Exception: {e}')
+                    config.initiate_shutdown("Initiating shutdown.")
+                    #sys.exit(1)
 
         else:
             config.logger.warning(f"Unknown model type: {self.model_type}")
-            sys.exit(1)
+            config.initiate_shutdown("Initiating shutdown.")
+            #sys.exit(1)
 
 def run_hf_model(input_text, base_model, tokenizer):
     """

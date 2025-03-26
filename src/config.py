@@ -13,6 +13,24 @@ if not logger.handlers:
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
+# new code for graceful exits
+#
+import signal
+# Global flag for graceful shutdown
+bail_out = False
+def handle_sigint(signum, frame):
+    global bail_out
+    bail_out = True
+    logger.warning("Interrupt received or fatal error encountered: setting bail_out flag to True.")
+signal.signal(signal.SIGINT, handle_sigint)
+
+def initiate_shutdown(message="Bailing gracefully"):
+    logger.error(message)
+    global bail_out
+    bail_out = True
+    raise SystemExit(message)
+
+
 # add a "no op" progress bar for quiet mode
 class NoOpTqdm:
     """A do-nothing progress bar class that safely ignores all tqdm calls."""
