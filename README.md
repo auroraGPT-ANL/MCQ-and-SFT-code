@@ -37,12 +37,10 @@ conda env create -f environment.yml
 conda activate globus_env
 ```
 
-4. **Populate \_PAPERS**
-Place PDF-formatted input materials (e.g., scientific papers) into \_PAPERS.
+4. **Populate \_PAPERS:** Place PDF-formatted input materials (e.g., scientific papers) into \_PAPERS.
 
-5. **Set up configuration:**
-Edit *config.yml* to specify at least two and up to four models you wish to use.
-(see **Configuration** notes below)
+5. **Set up configuration:** Edit *config.yml* to specify at least two and up to four
+models you wish to use.  (see **Configuration** notes below)
 
 ### Workflow Overview
 
@@ -51,7 +49,7 @@ This pipeline converts scientific papers in PDF format into JSON and then uses A
 * Create answers to those MCQs
 * Score the generated answers
 
-**Workflow Steps:**
+**Step-by-Step Workflow:**
 [View Workflow Flowchart](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/CeC/MCQ-Workflow.png)
 
 1. Convert PDFs to JSON representations
