@@ -22,7 +22,8 @@ directories:
 # 
 
 model:
-  name:         "cafe:llama31-405b-fp8"
+  name:         "cafe:meta-llama/Llama-3.3-70B-Instruct"
+#name:         "cafe:llama31-405b-fp8"
   #name:         "alcf:argonne-private/AuroraGPT-Tulu3-SFT-0125"
   #name:        "alcf:mistralai/Mistral-7B-Instruct-v0.3"
 #  name:        "local:deepseek-r1-distill-llama-8b"

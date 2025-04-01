@@ -143,7 +143,8 @@ class Model:
             # For now, simply set the token to a placeholder
             token = "CELS"
             self.model_type = 'CAFE'
-            self.endpoint   = 'https://66.55.67.65/v1'
+            #self.endpoint   = 'https://66.55.67.65/v1'
+            self.endpoint   = 'https://195.88.24.64/v1'
             self.key        = token
 
 
