@@ -71,7 +71,7 @@ For a quick and comprehensive run of the entire workflow:
 1. Define up to 4 models in `config.yml`
 2. Run the bundled workflow script:
 
-Examples:
+**Examples:**
 
 Run with default 8-way parallelism
 ```bash
