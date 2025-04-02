@@ -28,11 +28,13 @@ mkdir _PAPERS _JSON _MCQ _RESULTS
 ```
 
 3. **Set Up Conda Environment:**
+Option 1: Update your existing Conda environment
 ```bash
-# Option 1: Update existing environment
 conda env update --name <your_conda_env> --file environment.yml
+```
 
-# Option 2: Create new environment
+Option 2: Create new environment
+```bash
 conda env create -f environment.yml
 conda activate globus_env
 ```
@@ -69,14 +71,20 @@ For a quick and comprehensive run of the entire workflow:
 1. Define up to 4 models in `config.yml`
 2. Run the bundled workflow script:
 
+Examples:
+
+Run with default 8-way parallelism
 ```bash
-# Run with default 8-way parallelism
 ./src/run_workflow.sh
+```
 
-# Run with 12-way parallelism
+Run with 12-way parallelism
+```bash
 ./src/run_workflow.sh -p 12
+```
 
-# Run with 20 randomly selected MCQs
+Run with 20 randomly selected MCQs
+```bash
 ./src/run_workflow.sh -n 20
 ```
 
