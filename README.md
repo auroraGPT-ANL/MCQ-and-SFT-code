@@ -95,6 +95,33 @@ This pipeline converts scientific papers in PDF format into JSON and then uses A
 
 ## Workflow Execution
 
+Note that if you are using the ALCF inference endpoint service you might first check to see if any
+models are running, as it takes 10-15 minutes for a model to load.  This will cause any of the 
+codes below (generate\_mcqs.py, generate\_answers.py, score\_answers.py) to time out.
+
+**Check which models are running**
+
+You may wish to check to see which models are currently running as waiting for a model to load can
+take 10-15 minutes (see 
+[ALCF Inference service](https://github.com/argonne-lcf/inference-endpoints)). Get the list of running
+and queued models as follows:
+   ```bash
+   access_token=$(python src/inference_auth_token.py get_access_token)
+   curl -X GET "https://data-portal-dev.cels.anl.gov/resource_server/sophia/jobs" \
+       -H "Authorization: Bearer ${access_token}" | jq
+   ```
+Piping the output to ``jq`` (Command-line JSON processor) makes it much easier to read.
+
+**Notes**
+ - If you are not connected via VPN or to Argonne-auth at the lab then you'll get an error such as *curl: (6) Could not resolve host: data-portal-dev.cels.anl.gov*.
+ - If it's been a while since you authenticated, you'll get a "Permission denied" error. In this case, you'll need to re-authenticate:
+```
+python src/inference_auth_token.py authenticate --force
+```
+
+
+
+
 ### Bundled Workflow Execution
 
 For a quick and comprehensive run of the entire workflow:
