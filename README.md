@@ -83,24 +83,31 @@ For a quick and comprehensive run of the entire workflow:
 ### Detailed Step-by-Step Workflow
 
 #### 1. Convert PDFs to JSON
+Default parsing
 ```bash
-# Default parsing
 python src/simple_parse.py
+```
 
-# Specify input and output directories
+or explicitly specify input and output directories
+```bash
 python src/simple_parse.py -i _PAPERS -o _JSON
 ```
 
 #### 2. Generate MCQs
+Authenticate with ALCF inference service
 ```bash
-# Authenticate with ALCF inference service
 python src/inference_auth_token.py authenticate
+```
 
-# Generate MCQs (using default or specified model)
+Generate MCQs (using default or specified model)
+```bash
 python src/generate_mcqs.py
-# OR
+```
+or to specify a different model than in *config.yml*:
+```bash
 python src/generate_mcqs.py -m 'alcf:mistralai/Mistral-7B-Instruct-v0.3'
 ```
+(noting that models are specified as *location*:*model_name* - see **Additional Notes** below)
 
 #### 3. Combine MCQ JSON Files
 ```bash
@@ -113,20 +120,23 @@ python src/select_mcqs_at_random.py -i MCQ-combined.json -o MCQ-subset.json -n 1
 ```
 
 #### 5. Generate Answers
+Using model from config.yml
 ```bash
-# Using model from config.yml
 python src/generate_answers.py -i MCQ-subset.json
-
-# Specify a different model
+```
+Or to specify a different model than the one in *config.yml*:
+```bash
 python src/generate_answers.py -i MCQ-subset.json -m 'alcf:meta-llama/Meta-Llama-3-70B-Instruct'
 ```
 
 #### 6. Score Answers
+Using models from config.yml
 ```bash
-# Using models from config.yml
 python src/score_answers.py
+```
 
-# Specify models explicitly
+Or to specify models explicitly (different than the ones in *config.yml*:
+```bash
 python src/score_answers.py -a 'model-A' -b 'model-B'
 ```
 
