@@ -9,6 +9,13 @@ This repository provides Python programs for:
 
 **Contact:** Please email {foster|stevens|catlett}@anl.gov if you see things that are unclear or missing.
 
+## Table of Contents
+- [Prerequisites](#prerequisites)
+- [Workflow Overview](#workflow-overview)
+- [Workflow Execution](#workflow-execution)
+- [Configuration](#configuration)
+- [Notes](#notes)
+
 ## Prerequisites
 
 ### ALCF Inference Service Setup
@@ -118,6 +125,10 @@ Piping the output to ``jq`` (Command-line JSON processor) makes it much easier t
 ```
 python src/inference_auth_token.py authenticate --force
 ```
+
+If no models are running, then you'll need to invoke one (and wait 10-15 minutes) using 
+one of the codes below (generate\_mcqs.py, generate\_answers.py, score\_answers.py). They will
+time out and you'll need to ^C interrupt them, but this will queue up a model to run. 
 
 
 
