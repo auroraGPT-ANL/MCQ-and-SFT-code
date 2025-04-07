@@ -90,10 +90,22 @@ def main():
 
     # Load QA pairs from input file
     try:
+        data = []
         with open(json_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
+            for line in f:
+                try:
+                    item = json.loads(line.strip())
+                    data.append(item)
+                except json.JSONDecodeError as e:
+                    config.logger.warning(f"Skipping invalid JSON line: {e}")
+                    continue
     except Exception as e:
         config.logger.error(f"ERROR: File {json_file} not found or could not be read: {e}")
+        config.initiate_shutdown("Initiating shutdown.")
+        #sys.exit(0)
+
+    if not data:
+        config.logger.error("No valid data found in input file")
         config.initiate_shutdown("Initiating shutdown.")
         #sys.exit(0)
 
@@ -101,7 +113,8 @@ def main():
     if args.end == 'all':
         data = data[start_index:]
     else:
-        data = data[start_index:int(args.end)]
+        end_index = int(args.end)
+        data = data[start_index:end_index]
     
     total_items = len(data)
     config.logger.info(f"Generating answers for {total_items} items using model {model_name}")
