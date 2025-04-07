@@ -3,6 +3,10 @@
 import os
 import yaml
 import logging
+import threading
+
+# global lock for file ops
+output_file_lock = threading.Lock()
 
 # Set up a unique logger.
 logger = logging.getLogger("MCQGenerator")
@@ -17,17 +21,17 @@ if not logger.handlers:
 #
 import signal
 # Global flag for graceful shutdown
-bail_out = False
+shutdown_event = threading.Event()
+
 def handle_sigint(signum, frame):
-    global bail_out
-    bail_out = True
-    logger.warning("Interrupt received or fatal error encountered: setting bail_out flag to True.")
+    shutdown_event.set()
+    logger.warning("Interrupt or fatal error: exiting after all threads complete.")
+
 signal.signal(signal.SIGINT, handle_sigint)
 
-def initiate_shutdown(message="Bailing gracefully"):
+def initiate_shutdown(message="Shutting down."):
     logger.error(message)
-    global bail_out
-    bail_out = True
+    shutdown_event.set()
     raise SystemExit(message)
 
 
