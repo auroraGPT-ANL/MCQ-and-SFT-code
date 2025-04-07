@@ -159,6 +159,23 @@ class Model:
                 self.key = file.read().strip()
             self.endpoint = OPENAI_EP
 
+        elif model_name.startswith('test:'):
+            """
+            Test model type - returns predefined responses for offline testing
+            Optional format: test:mcq, test:answer, test:score
+            Default is test:all (responds to all types)
+            """
+            self.model_name = model_name.split('test:')[1] if ':' in model_name else "all"
+            config.logger.info(f"Test model initialized: {self.model_name}")
+            self.model_type = 'Test'
+            self.endpoint = None  # No endpoint needed
+            self.temperature = 0.0  # Deterministic responses
+            self.key = None
+            
+            # Import the TestModel class here to avoid circular imports
+            from test_model import TestModel
+            self.test_model = TestModel(self.model_name)
+
         else:
             config.logger.warning(f"Bad model: {model_name}")
             config.initiate_shutdown("Initiating shutdown.")
@@ -253,18 +270,18 @@ class Model:
                 "temperature": temperature
             }
             try:
-                config.logger.info(f'Running {self.endpoint}\n'
-                                   f'  Headers = {self.headers}\n'
-                                   f'  Data = {json.dumps(data)}')
+                config.logger.info(f'Running {self.endpoint} ')
+                                   #f'  Headers = {self.headers}\n'
+                                   #f'  Data = {json.dumps(data)}')
                 resp = requests.post(self.endpoint, headers=self.headers, data=json.dumps(data))
-                config.logger.info(f"Raw response: {resp}")
+                #config.logger.info(f"Raw response: {resp}")
                 response_json = resp.json()
-                config.logger.info(f"Parsed JSON: {response_json}")
+                #config.logger.info(f"Parsed JSON: {response_json}")
                 message = response_json['choices'][0]['message']['content']
-                config.logger.info(f"Response message: {message}")
+                #config.logger.info(f"Response message: {message}")
                 return message
             except Exception as e:
-                config.logger.warning(f'Exception: {e}')
+                config.logger.warning(f"Exception: {str(e)[:80]}...")
                 config.initiate_shutdown("Initiating shutdown.")
                 #sys.exit(1)
 
@@ -288,13 +305,13 @@ class Model:
                 generated_text = response.choices[0].message.content.strip()
                 return generated_text
             except APITimeoutError as e:
-                config.logger.info(f"OpenAI/ALCF request timed out: {e}") #not fatal so don't clutter
+                config.logger.info(f"OpenAI/ALCF request timed out: {str(e)[:80]}...") #not fatal so don't clutter
                 return ""
             except Exception as e:
                 if "401" in str(e) or "Unauthorized" in str(e):
                     config.initiate_shutdown("Model API Authentication failed. Exiting.")
                     #sys.exit("Model API Authentication failed. Exiting.")
-                config.logger.info(f"OpenAI/ALCF request error: {e}")  # alert the user elsewhere if too many errs
+                config.logger.info(f"OpenAI/ALCF request error: {str(e)[:80]}...")  # alert the user elsewhere if too many errs
                 return ""
 
         elif self.model_type == 'CAFE':
@@ -321,9 +338,14 @@ class Model:
                     config.logger.info(f"Response message: {message}")
                     return message
                 except Exception as e:
-                    config.logger.warning(f'Exception: {e}')
+                    config.logger.warning(f"Exception: {str(e)[:80]}...")
                     config.initiate_shutdown("Initiating shutdown.")
                     #sys.exit(1)
+        elif self.model_type == 'Test':
+            # Test model - delegates to the TestModel class for predefined responses
+            config.logger.info(f"Running test model with prompt: {user_prompt[:50]}...")
+            # Use the TestModel instance to generate the appropriate response
+            return self.test_model.generate_response(user_prompt, system_prompt)
 
         else:
             config.logger.warning(f"Unknown model type: {self.model_type}")
