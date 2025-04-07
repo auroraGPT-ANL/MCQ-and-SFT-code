@@ -1,5 +1,20 @@
 # Changelog
 
+### v1.5 - xxYyy2025 (CeC)
+- generate\_mcqs
+    - write all MCQs out after finishing each file, not by chunk
+    - Improve ^C interrupt handling for things like model time outs
+    - Write to a debug file when JSON parsing fails in case we want to investigate
+- model\_access
+    - implement a "test" model to validate the workflow (including generate\_mcqs,
+      generate\_answers, and score\_answers) with a dummy model both for speed
+      (local models are not so fast) and situations where no models are available
+     (like working offline)
+- generate\_answers
+    - reads JSONL to match format of MCQS json files.
+- test\_model.py
+    - a stub model for testing
+
 ### v1.4 - 26Mar2025 (CeC)
 - Implemented a global "bail out" flag and checks before iniating new threads so that
   one can abort without having to hammer ^C multiple times, and so that fatal errors
