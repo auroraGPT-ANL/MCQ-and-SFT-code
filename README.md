@@ -7,7 +7,7 @@ This repository provides Python programs for:
 * Fine-tuning models based on supplied data
 * Workflow tools for scientific paper analysis
 
-[View Workflow Flowchart](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/CeC/MCQ-Workflow.png)
+[View Example Workflow Flowchart](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/CeC/MCQ-Workflow.png)
 
 **Contact:** Please email {foster|stevens|catlett}@anl.gov if you see things that are unclear or missing.
 
@@ -92,7 +92,8 @@ This pipeline converts scientific papers in PDF format into JSON and then uses A
 * Score the generated answers
 
 **Step-by-Step Workflow:**
-[View Workflow Flowchart](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/CeC/MCQ-Workflow.png)
+[View Example Workflow Flowchart](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/CeC/MCQ-Workflow.png)
+(This chart is a simplified instance of the workflow)
 
 1. Convert PDFs to JSON representations
 2. Generate MCQs from JSON files
