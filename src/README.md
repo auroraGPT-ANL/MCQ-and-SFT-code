@@ -20,13 +20,13 @@ The `run_workflow.sh` script accepts the following options:
 
 ## Test Infrastructure
 
-The testing infrastructure consists of two main components that work together to enable both offline testing and workflow verification. For offline testing, we use a stub model implementation (src/test_model.py) that provides predefined responses, allowing us to test all workflow components without requiring access to actual language models. The two testing components serve different but complementary purposes:
+The testing infrastructure consists of two main components that work together to enable both offline testing and workflow verification. For offline testing, we use a stub model implementation (src/test\_model.py) that provides predefined responses, allowing us to test all workflow components without requiring access to actual language models. The two testing components serve different but complementary purposes:
 
 ### 1. Workflow Integration Test (`test_workflow.sh`)
 
 Integration testing focused on the complete system:
 - Tests the entire workflow pipeline, making sure all scripts work together correctly
-- Uses a simplified setup with just two models
+- Uses a simplified setup with just two models (A and B in config.yml)
 - Verifies integration between all components
 - Uses real PDF input for testing
 - Tests the complete workflow:
@@ -34,7 +34,7 @@ Integration testing focused on the complete system:
   * MCQ generation
   * Answer generation
   * Score computation
-- Creates and processes temporary files
+- Creates and processes temporary files (does not affect user data in \_PAPERS and other working directories)
 
 To run the workflow test with a specific input:
 ```bash
@@ -43,8 +43,10 @@ To run the workflow test with a specific input:
 
 ### 2. Test Model Verification (`test_model_verification.py`)
 
+To facilitate offline testing without any delays of model interactions, a test model ('test\_model.py') is
+used. This code ensures that the test model functions properly with each of the workflow components.
 Unit testing focused on validating the stub model implementation:
-- Tests the offline test model implementation (src/test_model.py)
+- Tests the offline test model implementation (src/test\_model.py)
 - Verifies that the stub model provides appropriate responses
 - Tests three specific variants (all, mcq, score)
 - Uses predefined test prompts
@@ -59,25 +61,10 @@ To run the test model verification:
 ```bash
 python src/test_model_verification.py
 ```
+Use the '-v' or '--verbose' option for more detailed test messages.
 
-### Key Differences Between Test Components
 
-1. **Scope**: 
-   - `test_model_verification.py`: Unit testing of stub model functionality
-   - `test_workflow.sh`: Integration testing of the complete system
-
-2. **Data Usage**:
-   - `test_model_verification.py`: Uses predefined test prompts
-   - `test_workflow.sh`: Uses real PDF input and actual data
-
-3. **Model Usage**:
-   - `test_model_verification.py`: Tests the stub model implementation
-   - `test_workflow.sh`: Uses a simplified two-model setup
-
-4. **Purpose**:
-   - `test_model_verification.py`: Validates the stub model implementation
-   - `test_workflow.sh`: Verifies system integration and workflow
-## Development Tools
+## Other Tools
 
 For developers working on extending the codebase:
 
