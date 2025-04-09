@@ -5,7 +5,7 @@
 The `run_workflow.sh` script orchestrates the main workflow, which consists of several Python scripts executed in sequence:
 
 1. `simple_parse.py`: Converts PDF files into JSON format for processing
-2. `generate_mcqs.py`: Generates Multiple Choice Questions (MCQs) using the specified model
+2. `generate_mcqs.py`: Processes input text in parallel chunks to generate Multiple Choice Questions (MCQs)
 3. `combine_json_files.py`: Combines individual JSON files containing MCQs into a single file
 4. `generate_answers.py`: Uses specified models to generate answers for the MCQs
 5. `score_answers.py`: Evaluates the quality of generated answers using other models
@@ -47,7 +47,7 @@ To test the workflow with verbose output:
 ### Test Coverage
 
 The test suite verifies:
-1. Augmented chunk generation
+1. Text processing and enhancement
 2. MCQ generation
 3. Answer verification
 4. Response scoring
