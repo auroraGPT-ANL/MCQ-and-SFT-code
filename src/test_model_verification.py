@@ -5,7 +5,7 @@ import json
 import logging
 import os
 from model_access import Model
-import config
+from config import logger
 
 # Set up logging
 logging.basicConfig(
@@ -18,7 +18,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger("test_model_verification")
-config.logger = logger
 
 def test_model_run(model, prompt_type, prompt_text, expected_format=None):
     """

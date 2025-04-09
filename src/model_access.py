@@ -11,7 +11,7 @@ import requests
 import openai
 from openai import OpenAI
 import logging
-import config
+from config import timeout, logger, initiate_shutdown
 
 from exceptions import APITimeoutError
 
@@ -48,7 +48,7 @@ class Model:
         # Identify model type by prefix (local:, hf:, openai:, etc.)
         if model_name.startswith('local:'):
             self.model_name = model_name.split('local:')[1]
-            config.logger.info(f"Local model: {model_name}.")
+            logger.info(f"Local model: {model_name}.")
             self.model_type = 'vLLM'
             self.endpoint   = 'http://localhost:8000/v1/chat/completions'
 
@@ -63,10 +63,10 @@ class Model:
             self.job_id       = None
             self.status       = "PENDING"
 
-            config.logger.info(f'Huggingface model {self.model_name} to be run on HPC system: Starting model server.')
+            logger.info(f'Huggingface model {self.model_name} to be run on HPC system: Starting model server.')
             result = subprocess.run(["qsub", self.model_script], capture_output=True, text=True, check=True)
             self.job_id = result.stdout.strip().split(".")[0]  # Extract job ID
-            config.logger.info(f"Job submitted with ID: {self.job_id}")
+            logger.info(f"Job submitted with ID: {self.job_id}")
 
             # Wait until job starts running
             self.wait_for_job_to_start()
@@ -75,10 +75,10 @@ class Model:
             self.client_socket.sendall(self.model_name.encode())
             response = self.client_socket.recv(1024).decode()
             if response != 'ok':
-                config.logger.warning(f"Unexpected response: {response}")
+                logger.warning(f"Unexpected response: {response}")
                 config.initiate_shutdown("Initiating shutdown.")
                 #sys.exit(1)
-            config.logger.info("Model server initialized")
+            logger.info("Model server initialized")
 
         elif model_name.startswith('hf:'):
             """
@@ -91,7 +91,7 @@ class Model:
             cache_dir = os.getenv("HF_HOME")
 
             self.model_name = model_name.split('hf:')[1]
-            config.logger.info(f"HF model running locally: {model_name}")
+            logger.info(f"HF model running locally: {model_name}")
             self.endpoint = 'http://huggingface.co'
 
             with open("hf_access_token.txt", "r") as file:
@@ -118,14 +118,14 @@ class Model:
             Use the ALCF Inference Service endpoint
             """
             self.model_name = model_name.split('alcf:')[1]
-            config.logger.info(f"ALCF Inference Service Model: {self.model_name}")
+            logger.info(f"ALCF Inference Service Model: {self.model_name}")
 
             from inference_auth_token import get_access_token
             token = get_access_token()
             from alcf_inference_utilities import get_names_of_alcf_chat_models
             alcf_chat_models = get_names_of_alcf_chat_models(token)
             if self.model_name not in alcf_chat_models:
-                config.logger.warning(f"Bad ALCF model: {self.model_name}")
+                logger.warning(f"Bad ALCF model: {self.model_name}")
                 config.initiate_shutdown("Initiating shutdown.")
                 #sys.exit(1)
             self.model_type = 'ALCF'
@@ -138,7 +138,7 @@ class Model:
             Use Rick's Cafe Inference Service endpoint
             """
             self.model_name = model_name.split('cafe:')[1]
-            config.logger.info(f"Rick's Cafe Inference Service Model: {self.model_name}")
+            logger.info(f"Rick's Cafe Inference Service Model: {self.model_name}")
 
             # For now, simply set the token to a placeholder
             token = "CELS"
@@ -153,7 +153,7 @@ class Model:
             Use OpenAI's API (e.g. GPT-3.5/4)
             """
             self.model_name = model_name.split('openai:')[1]
-            config.logger.info(f"OpenAI model to be run at OpenAI: {self.model_name}")
+            logger.info(f"OpenAI model to be run at OpenAI: {self.model_name}")
             self.model_type = 'OpenAI'
             with open('openai_access_token.txt', 'r') as file:
                 self.key = file.read().strip()
@@ -166,7 +166,7 @@ class Model:
             Default is test:all (responds to all types)
             """
             self.model_name = model_name.split('test:')[1] if ':' in model_name else "all"
-            config.logger.info(f"Test model initialized: {self.model_name}")
+            logger.info(f"Test model initialized: {self.model_name}")
             self.model_type = 'Test'
             self.endpoint = None  # No endpoint needed
             self.temperature = 0.0  # Deterministic responses
@@ -177,7 +177,7 @@ class Model:
             self.test_model = TestModel(self.model_name)
 
         else:
-            config.logger.warning(f"Bad model: {model_name}")
+            logger.warning(f"Bad model: {model_name}")
             config.initiate_shutdown("Initiating shutdown.")
             #sys.exit(1)
 
@@ -189,10 +189,10 @@ class Model:
             match = re.search(r"exec_host = (\S+)", qstat_output)
             if match:
                 self.compute_node = match.group(1).split("/")[0]
-                config.logger.info(f"Job {self.job_id} is running on {self.compute_node}")
+                logger.info(f"Job {self.job_id} is running on {self.compute_node}")
                 self.status = "RUNNING"
                 break
-            config.logger.info(f"Waiting for job {self.job_id} to start...")
+            logger.info(f"Waiting for job {self.job_id} to start...")
             time.sleep(5)  # Check every 5 seconds
 
     def connect_to_model_server(self):
@@ -200,7 +200,7 @@ class Model:
         if self.status != "RUNNING":
             raise RuntimeError("Model is not running. Ensure the PBS job is active.")
 
-        config.logger.info(f"Connecting to {self.compute_node} on port 50007...")
+        logger.info(f"Connecting to {self.compute_node} on port 50007...")
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         for count in range(10):
             try:
@@ -208,23 +208,23 @@ class Model:
                 break
             except:
                 time.sleep(5)
-                config.logger.warning(f"Trying connection again {count}")
+                logger.warning(f"Trying connection again {count}")
 
     def details(self):
         """
         Print basic info about the model to the logs.
         """
-        config.logger.info(f"Model name: {self.model_name}")
-        config.logger.info(f"    Model type  = {self.model_type}")
-        config.logger.info(f"    Endpoint    = {self.endpoint}")
-        config.logger.info(f"    Temperature = {self.temperature}")
-        config.logger.info(f"    Base model  = {self.base_model}")
-        config.logger.info(f"    Tokenizer   = {self.tokenizer}")
+        logger.info(f"Model name: {self.model_name}")
+        logger.info(f"    Model type  = {self.model_type}")
+        logger.info(f"    Endpoint    = {self.endpoint}")
+        logger.info(f"    Temperature = {self.temperature}")
+        logger.info(f"    Base model  = {self.base_model}")
+        logger.info(f"    Tokenizer   = {self.tokenizer}")
 
     def close(self):
         """Close the cached connection when done."""
         if self.client_socket:
-            config.logger.info("Closing connection to model server.")
+            logger.info("Closing connection to model server.")
             self.client_socket.close()
             self.client_socket = None
 
@@ -244,7 +244,7 @@ class Model:
         if self.model_type == 'Huggingface':
             # Local HF model
             from transformers import GenerationConfig
-            config.logger.info(f"Generating with HF model: {self.model_name}")
+            logger.info(f"Generating with HF model: {self.model_name}")
             return run_hf_model(user_prompt, self.base_model, self.tokenizer)
 
         elif self.model_type == 'HuggingfacePBS':
@@ -253,10 +253,10 @@ class Model:
                 raise RuntimeError("Model is not running. Ensure the PBS job is active.")
             if self.client_socket is None:
                 raise RuntimeError("Socket is not connected")
-            config.logger.info(f"Sending input to HPC model: {user_prompt}")
+            logger.info(f"Sending input to HPC model: {user_prompt}")
             self.client_socket.sendall(user_prompt.encode())
             response = self.client_socket.recv(1024).decode()
-            config.logger.info(f"HPC model response: {response}")
+            logger.info(f"HPC model response: {response}")
             return response
 
         elif self.model_type == 'vLLM':
@@ -270,18 +270,18 @@ class Model:
                 "temperature": temperature
             }
             try:
-                config.logger.info(f'Running {self.endpoint} ')
+                logger.info(f'Running {self.endpoint} ')
                                    #f'  Headers = {self.headers}\n'
                                    #f'  Data = {json.dumps(data)}')
                 resp = requests.post(self.endpoint, headers=self.headers, data=json.dumps(data))
-                #config.logger.info(f"Raw response: {resp}")
+                #logger.info(f"Raw response: {resp}")
                 response_json = resp.json()
-                #config.logger.info(f"Parsed JSON: {response_json}")
+                #logger.info(f"Parsed JSON: {response_json}")
                 message = response_json['choices'][0]['message']['content']
-                #config.logger.info(f"Response message: {message}")
+                #logger.info(f"Response message: {message}")
                 return message
             except Exception as e:
-                config.logger.warning(f"Exception: {str(e)[:80]}...")
+                logger.warning(f"Exception: {str(e)[:80]}...")
                 config.initiate_shutdown("Initiating shutdown.")
                 #sys.exit(1)
 
@@ -300,18 +300,18 @@ class Model:
                     model=self.model_name,
                     messages=messages,
                     temperature=temperature,
-                    timeout=60
+                    timeout=config.timeout
                 )
                 generated_text = response.choices[0].message.content.strip()
                 return generated_text
             except APITimeoutError as e:
-                config.logger.info(f"OpenAI/ALCF request timed out: {str(e)[:80]}...") #not fatal so don't clutter
+                logger.info(f"OpenAI/ALCF request timed out: {str(e)[:80]}...") #not fatal so don't clutter
                 return ""
             except Exception as e:
                 if "401" in str(e) or "Unauthorized" in str(e):
                     config.initiate_shutdown("Model API Authentication failed. Exiting.")
                     #sys.exit("Model API Authentication failed. Exiting.")
-                config.logger.info(f"OpenAI/ALCF request error: {str(e)[:80]}...")  # alert the user elsewhere if too many errs
+                logger.info(f"OpenAI/ALCF request error: {str(e)[:80]}...")  # alert the user elsewhere if too many errs
                 return ""
 
         elif self.model_type == 'CAFE':
@@ -325,30 +325,30 @@ class Model:
                     "temperature": temperature
                 }
                 try:
-                    config.logger.info(
+                    logger.info(
                         f'Running {self.endpoint}\n'
                         f'  Headers = {self.headers}\n'
                         f'  Data = {json.dumps(data)}'
                     )
                     resp = requests.post(self.endpoint, headers=self.headers, data=json.dumps(data))
-                    config.logger.info(f"Raw response: {resp}")
+                    logger.info(f"Raw response: {resp}")
                     response_json = resp.json()
-                    config.logger.info(f"Parsed JSON: {response_json}")
+                    logger.info(f"Parsed JSON: {response_json}")
                     message = response_json['choices'][0]['message']['content']
-                    config.logger.info(f"Response message: {message}")
+                    logger.info(f"Response message: {message}")
                     return message
                 except Exception as e:
-                    config.logger.warning(f"Exception: {str(e)[:80]}...")
+                    logger.warning(f"Exception: {str(e)[:80]}...")
                     config.initiate_shutdown("Initiating shutdown.")
                     #sys.exit(1)
         elif self.model_type == 'Test':
             # Test model - delegates to the TestModel class for predefined responses
-            config.logger.info(f"Running test model with prompt: {user_prompt[:50]}...")
+            logger.info(f"Running test model with prompt: {user_prompt[:50]}...")
             # Use the TestModel instance to generate the appropriate response
             return self.test_model.generate_response(user_prompt, system_prompt)
 
         else:
-            config.logger.warning(f"Unknown model type: {self.model_type}")
+            logger.warning(f"Unknown model type: {self.model_type}")
             config.initiate_shutdown("Initiating shutdown.")
             #sys.exit(1)
 

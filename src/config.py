@@ -17,7 +17,7 @@ if not logger.handlers:
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
-# new code for graceful exits
+# code for graceful exits
 #
 import signal
 # Global flag for graceful shutdown
@@ -35,7 +35,7 @@ def initiate_shutdown(message="Shutting down."):
     raise SystemExit(message)
 
 
-# add a "no op" progress bar for quiet mode
+# "no op" progress bar for quiet mode
 class NoOpTqdm:
     """A do-nothing progress bar class that safely ignores all tqdm calls."""
     def __init__(self, total=0, desc="", unit=""):
@@ -121,6 +121,7 @@ score_fallback_system = scoring_prompts.get("fallback_system", "")
 score_fallback_prompt = scoring_prompts.get("fallback_prompt", "")
 
 # --- Other config values ---
+timeout               = _config.get("timeout", 60)      # model interaction time out for model_access.py
 quality               = _config.get("quality", {})
 minScore              = quality.get("minScore", 7)
 chunkSize             = quality.get("chunkSize", 1024)
@@ -133,4 +134,3 @@ papers_dir            = directories.get("papers", "_PAPERS")
 json_dir              = directories.get("json", "_JSON")
 mcq_dir               = directories.get("mcq", "_MCQ")
 results_dir           = directories.get("results", "_RESULTS")
-
