@@ -10,8 +10,8 @@ directories:
   results: _RESULTS       # Where final results will be stored.
 
 # Model Defaults
-# Prompts (system and user messges)
-# Generate_mcq settings
+#
+timeout:    20            # model query timeout
 
 # Model 
 # temperature, base model, tokenizer applied to whatever model is specified
