@@ -2,7 +2,7 @@
 
 ## Main Workflow Components
 
-The `run_workflow.sh` script orchestrates the main workflow, which consists of several Python scripts executed in sequence:
+The `run_workflow.sh` script orchestrates the main workflow, which comprises several Python scripts executed in sequence:
 
 1. `simple_parse.py`: Converts PDF files into JSON format for processing
 2. `generate_mcqs.py`: Processes input text in parallel chunks to generate Multiple Choice Questions (MCQs)
@@ -20,7 +20,8 @@ The `run_workflow.sh` script accepts the following options:
 
 ## Test Infrastructure
 
-The testing infrastructure consists of two main components that work together to enable both offline testing and workflow verification. For offline testing, we use a stub model implementation (src/test\_model.py) that provides predefined responses, allowing us to test all workflow components without requiring access to actual language models. The two testing components serve different but complementary purposes:
+The testing infrastructure consists of two main components that work together to enable both offline
+testing and workflow verification.
 
 ### 1. Workflow Integration Test (`test_workflow.sh`)
 
@@ -43,8 +44,10 @@ To run the workflow test with a specific input:
 
 ### 2. Test Model Verification (`test_model_verification.py`)
 
-To facilitate offline testing without any delays of model interactions, a test model ('test\_model.py') is
-used. This code ensures that the test model functions properly with each of the workflow components.
+To facilitate offline testing without delays associated with model interactions, a stub model ('test\_model.py') is
+used. It provides predefined ressponses to test workflow components without requiring access to models.
+This code ensures that the test model functions properly with each of the workflow components.
+
 Unit testing focused on validating the stub model implementation:
 - Tests the offline test model implementation (src/test\_model.py)
 - Verifies that the stub model provides appropriate responses
