@@ -11,7 +11,7 @@ directories:
 
 # Model Defaults
 #
-timeout:    20            # model query timeout
+timeout:    45            # model query timeout
 
 # Model 
 # temperature, base model, tokenizer applied to whatever model is specified
@@ -29,12 +29,13 @@ timeout:    20            # model query timeout
   #name:        "openai:gpt-4"
   #name:        "local:deepseek-r1-distill-llama-8b"
   #name:        "pb:argonne-private/Llama2-70B"
-  #name:        "alcf:meta-llama/Meta-Llama-3-70B-Instruct"
+  #name:        "local:qwen2.5-7b-instruct-1m"
 
 # this model is the default for Model-A for score_answers.py
 #
 model:
-  name:        "local:qwen2.5-7b-instruct-1m"
+  #name:        "alcf:meta-llama/Meta-Llama-3-70B-Instruct"
+  name:        "argo:gpt4o"
   temperature:  0.7
   baseModel:   "None"
   Tokenizer:   "None"
@@ -58,6 +59,10 @@ model_b:
   #temperature: 0.7
   #baseModel: "None"
   #Tokenizer: "None"
+
+# Argo API configuration
+argo:
+  username_file: secrets.yml  # Path to secrets file containing Argo credentials
 
 
 # Other MCQ-related parameters
