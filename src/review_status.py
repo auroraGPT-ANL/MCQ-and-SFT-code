@@ -13,24 +13,40 @@ import logging
 import argparse
 import subprocess
 import sys
+import yaml
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
 
+def load_config():
+    """Load configuration from config.yml"""
+    try:
+        with open('config.yml', 'r') as f:
+            config = yaml.safe_load(f)
+        return config
+    except Exception as e:
+        logger.error(f"\n\nError: Failed to load config.yml: {e}")
+        return None
+
 def main():
+    # Load config
+    config = load_config()
+    if not config:
+        return 1
     parser = argparse.ArgumentParser(description='Review status of MCQ answer generation and scoring')
-    parser.add_argument('-i', '--inputs', help='MCQ input directory', required=True)
-    parser.add_argument('-o', '--outputdir', help='Directory with results files', required=True)
-    parser.add_argument('-a', '--answer-models', help='Comma-separated list of models to check for answers')
-    parser.add_argument('-s', '--score-models', help='Comma-separated list of models to check for scoring')
+    parser.add_argument('-i', '--inputs', help=f'MCQ input directory (default: {config["directories"]["mcq"]} from config.yml)')
+    parser.add_argument('-o', '--outputdir', help=f'Directory with results files (default: {config["directories"]["results"]} from config.yml)')
+    parser.add_argument('-a', '--answer-models', help=f'Comma-separated list of models to check for answers (default: {config["model"]["name"]} from config.yml)')
+    parser.add_argument('-s', '--score-models', help=f'Comma-separated list of models to check for scoring (default: {config["model_b"]["name"]} from config.yml)')
     parser.add_argument('-x', '--execute', help='Execute missing commands', action='store_true')
     parser.add_argument('-q', '--quiet', help='Reduce output verbosity', action='store_true')
     args = parser.parse_args()
 
     # Set up parameters
-    input_dir = args.inputs
-    output_dir = args.outputdir
+    # Use command-line args if provided, otherwise use config defaults
+    input_dir = args.inputs if args.inputs else config['directories']['mcq']
+    output_dir = args.outputdir if args.outputdir else config['directories']['results']
     execute = args.execute
     quiet = args.quiet
 
@@ -38,10 +54,16 @@ def main():
     answer_models = []
     if args.answer_models:
         answer_models = [m.strip() for m in args.answer_models.split(',')]
+    else:
+        # Use default from config if not specified on command line
+        answer_models = [config['model']['name']]
 
     score_models = []
     if args.score_models:
         score_models = [m.strip() for m in args.score_models.split(',')]
+    else:
+        # Use default from config if not specified on command line
+        score_models = [config['model_b']['name']]
 
     # Configure logging based on verbosity
     if quiet:
@@ -94,18 +116,13 @@ def main():
                 model_b = parts[1].replace('+', '/')
                 scores_done.add((model_a, model_b))
     
-    # If no models were specified, use all discovered models
-    if not answer_models:
-        answer_models = answer_models_done
-        if answer_models:
-            logger.info(f"No answer models specified, using all {len(answer_models)} found models")
-        else:
-            logger.info("No answer models specified and none found in output directory")
-        
-    if not score_models:
-        score_models = answer_models  # Default to same models for scoring
-        if score_models:
-            logger.info(f"No score models specified, using same as answer models ({len(score_models)} models)")
+    # If no generated answers found for the specified models, inform the user
+    if not any(model in answer_models_done for model in answer_models):
+        logger.info(f"No generated answers found for specified models: {', '.join(answer_models)}")
+    
+    # If no models were discovered in the output directory
+    if not answer_models_done:
+        logger.info(f"No answer files found for any models in '{output_dir}'")
     
     # Determine what commands need to be run
     answer_commands = []
