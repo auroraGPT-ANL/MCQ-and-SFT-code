@@ -18,7 +18,7 @@ from exceptions import APITimeoutError
 logger = logging.getLogger(__name__)
 
 OPENAI_EP  = 'https://api.openai.com/v1'
-
+ARGO_EP    = 'https://apps.inside.anl.gov/argoapi/api/v1/resource/chat/'
 class Model:
     def __init__(self, model_name: str):
         """
@@ -44,8 +44,7 @@ class Model:
         self.key          = None
         self.client_socket = None
         self.status       = "UNKNOWN"
-
-        # Identify model type by prefix (local:, hf:, openai:, etc.)
+        self.argo_user    = None  # Argonne domain username for Argo API
         if model_name.startswith('local:'):
             self.model_name = model_name.split('local:')[1]
             logger.info(f"Local model: {model_name}.")
@@ -76,7 +75,7 @@ class Model:
             response = self.client_socket.recv(1024).decode()
             if response != 'ok':
                 logger.warning(f"Unexpected response: {response}")
-                config.initiate_shutdown("Initiating shutdown.")
+                initiate_shutdown("Initiating shutdown.")
                 #sys.exit(1)
             logger.info("Model server initialized")
 
@@ -126,7 +125,7 @@ class Model:
             alcf_chat_models = get_names_of_alcf_chat_models(token)
             if self.model_name not in alcf_chat_models:
                 logger.warning(f"Bad ALCF model: {self.model_name}")
-                config.initiate_shutdown("Initiating shutdown.")
+                initiate_shutdown("Initiating shutdown.")
                 #sys.exit(1)
             self.model_type = 'ALCF'
             self.endpoint   = 'https://data-portal-dev.cels.anl.gov/resource_server/sophia/vllm/v1'
@@ -159,6 +158,26 @@ class Model:
                 self.key = file.read().strip()
             self.endpoint = OPENAI_EP
 
+        elif model_name.startswith('argo:'):
+            """
+            Use Argonne's Argo API service (OpenAI-compatible API)
+            """
+            self.model_name = model_name.split('argo:')[1]
+            logger.info(f"Argo API model to be used: {self.model_name}")
+            self.model_type = 'Argo'  # Create a dedicated type for Argo
+            
+            # Get Argonne username for authentication
+            try:
+                with open('argo_user.txt', 'r') as file:
+                    self.argo_user = file.read().strip()
+                    logger.info(f"Using Argo user: {self.argo_user}")
+            except FileNotFoundError:
+                logger.warning("argo_user.txt not found. Please create it with your Argonne username.")
+                initiate_shutdown("Argo API requires authentication.")
+            
+            self.endpoint = ARGO_EP
+            self.headers['user'] = self.argo_user
+
         elif model_name.startswith('test:'):
             """
             Test model type - returns predefined responses for offline testing
@@ -178,7 +197,7 @@ class Model:
 
         else:
             logger.warning(f"Bad model: {model_name}")
-            config.initiate_shutdown("Initiating shutdown.")
+            initiate_shutdown("Initiating shutdown.")
             #sys.exit(1)
 
     def wait_for_job_to_start(self):
@@ -282,10 +301,10 @@ class Model:
                 return message
             except Exception as e:
                 logger.warning(f"Exception: {str(e)[:80]}...")
-                config.initiate_shutdown("Initiating shutdown.")
+                initiate_shutdown("Initiating shutdown.")
                 #sys.exit(1)
 
-        elif self.model_type in ['OpenAI', 'ALCF']:
+        elif self.model_type in ['OpenAI', 'ALCF', 'Argo']:
             # Chat completions via openai or ALCF
             client = OpenAI(
                 api_key=self.key,
@@ -300,7 +319,7 @@ class Model:
                     model=self.model_name,
                     messages=messages,
                     temperature=temperature,
-                    timeout=config.timeout
+                    timeout=timeout
                 )
                 generated_text = response.choices[0].message.content.strip()
                 return generated_text
@@ -309,7 +328,7 @@ class Model:
                 return ""
             except Exception as e:
                 if "401" in str(e) or "Unauthorized" in str(e):
-                    config.initiate_shutdown("Model API Authentication failed. Exiting.")
+                    initiate_shutdown("Model API Authentication failed. Exiting.")
                     #sys.exit("Model API Authentication failed. Exiting.")
                 logger.info(f"OpenAI/ALCF request error: {str(e)[:80]}...")  # alert the user elsewhere if too many errs
                 return ""
@@ -339,7 +358,7 @@ class Model:
                     return message
                 except Exception as e:
                     logger.warning(f"Exception: {str(e)[:80]}...")
-                    config.initiate_shutdown("Initiating shutdown.")
+                    initiate_shutdown("Initiating shutdown.")
                     #sys.exit(1)
         elif self.model_type == 'Test':
             # Test model - delegates to the TestModel class for predefined responses
@@ -349,7 +368,7 @@ class Model:
 
         else:
             logger.warning(f"Unknown model type: {self.model_type}")
-            config.initiate_shutdown("Initiating shutdown.")
+            initiate_shutdown("Initiating shutdown.")
             #sys.exit(1)
 
 def run_hf_model(input_text, base_model, tokenizer):
