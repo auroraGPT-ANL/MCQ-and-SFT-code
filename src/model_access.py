@@ -162,19 +162,19 @@ class Model:
             """
             Use Argonne's Argo API service (OpenAI-compatible API)
             """
+            from config import argo_user
+            
             self.model_name = model_name.split('argo:')[1]
             logger.info(f"Argo API model to be used: {self.model_name}")
             self.model_type = 'Argo'  # Create a dedicated type for Argo
             
-            # Get Argonne username for authentication
-            try:
-                with open('argo_user.txt', 'r') as file:
-                    self.argo_user = file.read().strip()
-                    logger.info(f"Using Argo user: {self.argo_user}")
-            except FileNotFoundError:
-                logger.warning("argo_user.txt not found. Please create it with your Argonne username.")
+            # Get Argonne username from config (which loads from secrets.yml)
+            self.argo_user = argo_user
+            if not self.argo_user:
+                logger.warning("Argo username not found in config/secrets")
                 initiate_shutdown("Argo API requires authentication.")
             
+            logger.info(f"Using Argo user: {self.argo_user}")
             self.endpoint = ARGO_EP
             self.headers['user'] = self.argo_user
 
