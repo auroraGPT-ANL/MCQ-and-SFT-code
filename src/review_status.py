@@ -1,162 +1,212 @@
 #!/usr/bin/env python
 
+"""
+Review status of MCQ answer generation and scoring.
+Identifies which models have generated answers and scores,
+and what work remains to be done.
+"""
+
 import os
-import requests
 import glob
+import json
+import logging
+import argparse
 import subprocess
+import sys
 
-from config import mcq_dir, results_dir
-from inference_auth_token import get_access_token
-alcf_access_token = get_access_token()
-from alcf_inference_utilities import get_names_of_alcf_chat_models, get_alcf_inference_service_model_queues
-alcf_chat_models = get_names_of_alcf_chat_models(alcf_access_token)
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+logger = logging.getLogger(__name__)
 
-
-def extract_model_a_from_scores_file_name(folder, file):
-    part1 = file.split(f'{folder}/scores_')[1]
-    part2 = part1.split('=')[0]
-    return part2.replace('+', '/')
-
-
-def extract_model_a_from_answers_file_name(folder, file):
-    part1 = file.split(f'{folder}/answers_')[1]
-    part2 = part1.split('=')[0]
-    return part2.replace('+', '/')
-
-
-def extract_model_b_from_scores_file_name(folder, file):
-    part1 = file.split(f'{folder}/scores_')[1]
-    part2 = part1.split('=')[1]
-    part3 = part2.split('.json')[0]
-    return part3.replace('+', '/')
-
-
-def generate_scores_file_name(folder, model_a, model_b):
-    return f'{folder}/scores_{model_a.replace("/","+")}:{model_b.replace("/","+")}.json'
-
-
-"""
-We want to run potentially many different modelAs and evaluate with many different modelBs.
-
-If a modelA has already been run once and scored with one modelB, it can be rescored with another.
-
-"""
 def main():
-    import argparse
-    parser = argparse.ArgumentParser(description='Program to run LLMs to generate and score answers to MCQs')
-    parser.add_argument('-i','--inputs', help='MCQ file (default: from config.yml)', default=mcq_dir)
-    parser.add_argument('-o','--outputdir', help='Directory to look for run results (default: from config.yml)', default=results_dir)
-    parser.add_argument('-s','--silent', help='Just show things to run', action='store_true')
-    parser.add_argument('-x','--execute', help='Execute commands', action='store_true')
-    parser.add_argument('-m','--more', help='Also look at non-running/queued models', action='store_true')
-    parser.add_argument('-c', "--cache-dir", type=str, default=os.getenv("HF_HOME"), help="Custom cache directory for Hugging Face")
+    parser = argparse.ArgumentParser(description='Review status of MCQ answer generation and scoring')
+    parser.add_argument('-i', '--inputs', help='MCQ input directory', required=True)
+    parser.add_argument('-o', '--outputdir', help='Directory with results files', required=True)
+    parser.add_argument('-a', '--answer-models', help='Comma-separated list of models to check for answers')
+    parser.add_argument('-s', '--score-models', help='Comma-separated list of models to check for scoring')
+    parser.add_argument('-x', '--execute', help='Execute missing commands', action='store_true')
+    parser.add_argument('-q', '--quiet', help='Reduce output verbosity', action='store_true')
     args = parser.parse_args()
 
-    # Set HF_HOME if using custom cache directory
-    if args.cache_dir:
-        os.environ["HF_HOME"] = args.cache_dir
-        print(f"Using Hugging Face cache directory: {args.cache_dir}")
+    # Set up parameters
+    input_dir = args.inputs
+    output_dir = args.outputdir
+    execute = args.execute
+    quiet = args.quiet
 
-    # Folder containing the output files
-    inputs = args.inputs
-    folder = args.outputdir
-    silent = args.silent
-    execute= args.execute
-    other  = args.more 
+    # Set models to check
+    answer_models = []
+    if args.answer_models:
+        answer_models = [m.strip() for m in args.answer_models.split(',')]
 
-    running_model_list, queued_model_list = get_alcf_inference_service_model_queues(alcf_access_token)
-    running_model_list = [model for model in running_model_list if model in alcf_chat_models]
-    running_model_list = [model for model in running_model_list if 'batch' not in model]
-    running_model_list = [model for model in running_model_list if 'auroragpt-0.1-chkpt' not in model]
-    running_model_list = [model for model in running_model_list if model != 'N/A']
-    running_model_list = ['alcf:'+model for model in running_model_list]
-    queued_model_list = ['alcf:'+model for model in queued_model_list]
-    running_model_list += ['pb:argonne-private/AuroraGPT-Tulu3-SFT-0125', 'pb:argonne-private/AuroraGPT-IT-v4-0125', 'openai:gpt-4o']
+    score_models = []
+    if args.score_models:
+        score_models = [m.strip() for m in args.score_models.split(',')]
 
-    # List available generated answers
-    answers_files = [file.replace('.json', '') for file in glob.glob(f'{folder}/answers_*')]
-    print('ANSWER_FILES:', answers_files)
-    if not silent:
-        print(f'\nReviewing answers and scores files in {folder}, looking for MCQs not answered and/or scored with running models.')
+    # Configure logging based on verbosity
+    if quiet:
+        logger.setLevel(logging.WARNING)
+    # Validate directories
+    if not os.path.exists(input_dir):
+        logger.error(f"\n\nError: Input directory '{input_dir}' does not exist")
+        return 1
 
-    models_scored = {}
+    if not os.path.exists(output_dir):
+        logger.error(f"\n\nError: Output directory '{output_dir}' does not exist")
+        return 1
+    # Check for MCQ input files
+    mcq_files = glob.glob(f'{input_dir}/*.json') + glob.glob(f'{input_dir}/*.jsonl')
+    if not mcq_files:
+        logger.error(f"\n\nError: No MCQ files (*.json or *.jsonl) found in '{input_dir}'")
+        return 1
+    else:
+        logger.info(f"Found {len(mcq_files)} MCQ input files in '{input_dir}'")
 
-    if not silent:
-        print(f'====== Models running, queued, available at ALCF inference service ====')
-        print(f'Running models: {running_model_list}')
-        print(f'Queued models : {queued_model_list}')
-        other_models = [model for model in alcf_chat_models if model not in running_model_list and model not in queued_model_list]
-        print(f'Other models : {other_models}')
-
-        # List for each set of answers which models have reviewed it
-        print(f'\n====== Answers and scores obtained to date for {folder} ========')
-        for file in answers_files:
-            model_a = file.split("answers_")[1].replace('+','/')
-            print(f'{model_a}')
-            score_files = glob.glob(f'{folder}/scores_{model_a.replace("/","+")}:*')
-            m_list = []
-            for score_file in score_files:
-                print('SF', score_file)
-                f = score_file.split(f'{folder}/scores_{model_a.replace("/","+")}=')[1]
-                model_b = f.split("_")[0].replace('+','/').replace('.json','')
-                print(f'\t{model_b}')
-                m_list.append(model_b)
-            models_scored[model_a] = m_list
-
-
-    no_answer_list = [f'python generate_answers.py -o {folder} -i {inputs} -m {model_a}' for model_a in running_model_list if not os.path.isfile(f'{folder}/answers_{model_a.replace("/","+")}.json')]
-
-    # List for each possible reviewer (i.e., a running model) which answers it has not reviewed
-    no_score_list = []
-    for model_b in running_model_list:
-        for filename in answers_files:
-            model_a = extract_model_a_from_answers_file_name(folder, filename)
-            if not os.path.isfile(generate_scores_file_name(folder, model_a, model_b)):
-                score_filename = generate_scores_file_name(folder, model_a, model_b)
-                command = f'python score_answers.py -o {folder} -a {model_a} -b {model_b}'
-                no_score_list.append(command)
-
-    if not silent and (no_answer_list != [] or no_score_list != []):
-        print('\n======= Commands that may be executed based on currently running models ==================')
-        if no_answer_list != []:
-            print('a) To generate answers')
-            for command in no_answer_list:
-                print(f'    {command}')
+    # Find all existing answer files
+    answer_files = glob.glob(f'{output_dir}/answers_*.jsonl')
+    if answer_files:
+        logger.info(f"Found {len(answer_files)} answer files in '{output_dir}'")
+    else:
+        logger.info(f"No answer files found in '{output_dir}'")
+    
+    # Extract model names from answer files
+    answer_models_done = []
+    for file in answer_files:
+        model_name = os.path.basename(file).split('answers_')[1].split('.jsonl')[0].replace('+','/')
+        answer_models_done.append(model_name)
+    
+    # Find all existing score files
+    score_files = glob.glob(f'{output_dir}/scores_*.jsonl')
+    if score_files:
+        logger.info(f"Found {len(score_files)} score files in '{output_dir}'")
+    else:
+        logger.info(f"No score files found in '{output_dir}'")
+    
+    # Extract model pairs that have been scored
+    scores_done = set()
+    for file in score_files:
+        # Parse the filename to extract both models
+        basename = os.path.basename(file)
+        if ':' in basename:
+            parts = basename.split('scores_')[1].split('.jsonl')[0].split(':')
+            if len(parts) == 2:
+                model_a = parts[0].replace('+', '/')
+                model_b = parts[1].replace('+', '/')
+                scores_done.add((model_a, model_b))
+    
+    # If no models were specified, use all discovered models
+    if not answer_models:
+        answer_models = answer_models_done
+        if answer_models:
+            logger.info(f"No answer models specified, using all {len(answer_models)} found models")
         else:
-            print('a) To generate answers: None')
-        if no_score_list != []:
-            print('b) To generate scores')
-            for command in no_score_list:
-                print(f'    {command}')
+            logger.info("No answer models specified and none found in output directory")
+        
+    if not score_models:
+        score_models = answer_models  # Default to same models for scoring
+        if score_models:
+            logger.info(f"No score models specified, using same as answer models ({len(score_models)} models)")
+    
+    # Determine what commands need to be run
+    answer_commands = []
+    for model in answer_models:
+        if model not in answer_models_done:
+            cmd = f'python generate_answers.py -i {input_dir} -o {output_dir} -m {model}'
+            answer_commands.append(cmd)
+    
+    score_commands = []
+    for model_a in answer_models_done:
+        for model_b in score_models:
+            if (model_a, model_b) not in scores_done:
+                cmd = f'python score_answers.py -o {output_dir} -a {model_a} -b {model_b}'
+                score_commands.append(cmd)
+    
+    # Report status
+    if not quiet:
+        if not answer_models and not score_models:
+            logger.error("\n\nError: No models to check and no existing models found")
+            logger.info("Use -a and -s options to specify models to check, for example:")
+            logger.info("  -a \"model1,model2\" -s \"model3,model4\"")
+            return 1
+
+        total_work = len(answer_commands) + len(score_commands)
+        if total_work > 0:
+            logger.info(f"\n===== Current Status ({total_work} tasks remaining) =====")
         else:
-            print('b) To generate scores: None')
-
-    # List running models that have not generated answers
-    if no_answer_list != [] and not silent and execute:
-        print('\n====== Generating answers with running models ============================================')
-        for command in no_answer_list:
-            print(f'    Executing {command}')
-            try:
-               subprocess.run(command, shell=True)
-            except OSError as e:
-                print(f'    Error {e}')
-                return -1
-
-    if not silent and no_score_list!=[] and execute:
-        print('\n====== Generating scores for answers that can be provided by a running model =============')
-        for command in no_score_list:
-            print(f'    Executing {command}')
-            try:
-                subprocess.run(command, shell=True)
-            except OSError as e:
-                print(f'    Error {e}')
-                return -1
-
-    if other:
-       print('\n====== Non-running/queued models ======')
-       for model_a in other_models:
-           if not os.path.isfile(f'{folder}/answers_{model_a.replace("/","+")}.json'):
-               print(f'\npython generate_answers.py -o {folder} -i {folder}.json -m {model_a}')
-
+            logger.info("\n===== Current Status (all tasks complete) =====")
+        
+        logger.info("\nAnswers Generated:")
+        for model in sorted(answer_models_done):
+            symbol = "✓" if model in answer_models else " "
+            logger.info(f"  {symbol} {model}")
+        
+        missing_answers = set(answer_models) - set(answer_models_done)
+        if missing_answers:
+            logger.info("\nAnswers Missing:")
+            for model in sorted(missing_answers):
+                logger.info(f"  ✗ {model}")
+        
+        # Display scoring status
+        logger.info("\nScoring Status:")
+        total_pairs = len(answer_models_done) * len(score_models)
+        completed_pairs = len(scores_done)
+        logger.info(f"  Completed: {completed_pairs} of {total_pairs} possible model pairs")
+        
+        if scores_done:
+            logger.info("\nScores Complete:")
+            for model_a, model_b in sorted(scores_done):
+                logger.info(f"  ✓ {model_a} scored by {model_b}")
+        
+        # Display missing score pairs
+        missing_scores = []
+        for model_a in answer_models_done:
+            for model_b in score_models:
+                if (model_a, model_b) not in scores_done:
+                    missing_scores.append((model_a, model_b))
+        
+        if missing_scores:
+            logger.info("\nScores Missing:")
+            for model_a, model_b in sorted(missing_scores):
+                logger.info(f"  ✗ {model_a} needs scoring by {model_b}")
+        
+        # Display commands to run
+        if answer_commands or score_commands:
+            logger.info("\n===== Commands to Run =====")
+            
+            if answer_commands:
+                logger.info("\nCommands to generate answers:")
+                for cmd in answer_commands:
+                    logger.info(f"  {cmd}")
+            
+            if score_commands:
+                logger.info("\nCommands to generate scores:")
+                for cmd in score_commands:
+                    logger.info(f"  {cmd}")
+    
+    # Execute commands if requested
+    if execute and (answer_commands or score_commands):
+        logger.info("\n===== Executing Commands =====")
+        
+        # Execute answer generation commands
+        if answer_commands:
+            logger.info("\nGenerating answers...")
+            for cmd in answer_commands:
+                logger.info(f"\nExecuting: {cmd}")
+                try:
+                    subprocess.run(cmd, shell=True, check=True)
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"Command failed: {e}")
+        
+        # Execute scoring commands
+        if score_commands:
+            logger.info("\nGenerating scores...")
+            for cmd in score_commands:
+                logger.info(f"\nExecuting: {cmd}")
+                try:
+                    subprocess.run(cmd, shell=True, check=True)
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"Command failed: {e}")
+    
+    return 0
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
