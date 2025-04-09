@@ -90,9 +90,40 @@ def load_config(file_path="config.yml"):
         logger.error(f"Error parsing YAML file '{file_path}': {exc}")
         raise
 
-# Load the raw YAML data
+def load_secrets(config_data):
+    """
+    Load secrets from the file specified in config.yml's argo.username_file
+    Returns the username or None if not found
+    """
+    # Get secrets file path from config
+    argo_config = config_data.get("argo", {})
+    secrets_file = argo_config.get("username_file")
+    
+    if not secrets_file:
+        logger.warning("No secrets file specified in config.yml")
+        return None
+        
+    try:
+        with open(secrets_file, "r", encoding="utf-8") as f:
+            secrets = yaml.safe_load(f)
+            return secrets.get("argo", {}).get("username")
+    except FileNotFoundError:
+        logger.warning(f"Secrets file '{secrets_file}' not found")
+        return None
+    except yaml.YAMLError as exc:
+        logger.error(f"Error parsing secrets file '{secrets_file}': {exc}")
+        return None
+    except Exception as e:
+        logger.error(f"Error reading secrets file: {e}")
+        return None
 
+# Load the raw YAML data
 _config = load_config()
+
+# Load Argo username from secrets
+argo_user = load_secrets(_config)
+if not argo_user:
+    logger.warning("Argo username not found in secrets file")
 
 # --- Model dictionaries ---
 model   = _config.get("model", {})
