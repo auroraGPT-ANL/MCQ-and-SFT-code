@@ -17,18 +17,38 @@ The `run_workflow.sh` script accepts the following options:
 - `-v`: Enable verbose output
 - `-n <number>`: Select a random subset of MCQs
 
+
 ## Test Infrastructure
 
-The testing infrastructure consists of two main components that serve different testing purposes:
+The testing infrastructure consists of two main components that work together to enable both offline testing and workflow verification. For offline testing, we use a stub model implementation (src/test_model.py) that provides predefined responses, allowing us to test all workflow components without requiring access to actual language models. The two testing components serve different but complementary purposes:
 
-### 1. Test Model Verification (`test_model_verification.py`)
+### 1. Workflow Integration Test (`test_workflow.sh`)
 
-Unit testing focused on verifying the test model implementation:
-- Tests the TestModel implementation itself
-- Verifies core functionality of model responses
+Integration testing focused on the complete system:
+- Tests the entire workflow pipeline, making sure all scripts work together correctly
+- Uses a simplified setup with just two models
+- Verifies integration between all components
+- Uses real PDF input for testing
+- Tests the complete workflow:
+  * PDF to JSON conversion
+  * MCQ generation
+  * Answer generation
+  * Score computation
+- Creates and processes temporary files
+
+To run the workflow test with a specific input:
+```bash
+./src/test_workflow.sh -i input.pdf [-v]
+```
+
+### 2. Test Model Verification (`test_model_verification.py`)
+
+Unit testing focused on validating the stub model implementation:
+- Tests the offline test model implementation (src/test_model.py)
+- Verifies that the stub model provides appropriate responses
 - Tests three specific variants (all, mcq, score)
-- Uses mock/test data
-- Tests specific components:
+- Uses predefined test prompts
+- Validates all required operations:
   * Augmented chunk generation
   * MCQ creation
   * Question verification
@@ -40,43 +60,23 @@ To run the test model verification:
 python src/test_model_verification.py
 ```
 
-### 2. Workflow Integration Test (`test_workflow.sh`)
-
-Integration testing focused on the complete system:
-- Tests the entire MCQ generation pipeline
-- Verifies integration between all components
-- Uses real PDF input and actual models
-- Tests the complete workflow:
-  * PDF to JSON conversion
-  * MCQ generation
-  * Answer generation
-  * Score computation
-- Uses actual model implementations (not test models)
-- Creates and processes temporary files
-
-To run the workflow test with a specific input:
-```bash
-./src/test_workflow.sh -i input.pdf [-v]
-```
-
 ### Key Differences Between Test Components
 
 1. **Scope**: 
-   - `test_model_verification.py`: Unit testing of model functionality
+   - `test_model_verification.py`: Unit testing of stub model functionality
    - `test_workflow.sh`: Integration testing of the complete system
 
 2. **Data Usage**:
-   - `test_model_verification.py`: Uses mock data
+   - `test_model_verification.py`: Uses predefined test prompts
    - `test_workflow.sh`: Uses real PDF input and actual data
 
 3. **Model Usage**:
-   - `test_model_verification.py`: Uses test models with predefined responses
-   - `test_workflow.sh`: Uses actual deployed models
+   - `test_model_verification.py`: Tests the stub model implementation
+   - `test_workflow.sh`: Uses a simplified two-model setup
 
 4. **Purpose**:
-   - `test_model_verification.py`: Verifies model implementation correctness
+   - `test_model_verification.py`: Validates the stub model implementation
    - `test_workflow.sh`: Verifies system integration and workflow
-
 ## Development Tools
 
 For developers working on extending the codebase:
