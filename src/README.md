@@ -19,59 +19,79 @@ The `run_workflow.sh` script accepts the following options:
 
 ## Test Infrastructure
 
-### Test Components
+The testing infrastructure consists of two main components that serve different testing purposes:
 
-1. `test_model.py`: Implements a test model that provides predefined responses for offline testing
-2. `test_model_verification.py`: Comprehensive test suite for verifying the test model implementation
+### 1. Test Model Verification (`test_model_verification.py`)
 
-### Running Tests
+Unit testing focused on verifying the test model implementation:
+- Tests the TestModel implementation itself
+- Verifies core functionality of model responses
+- Tests three specific variants (all, mcq, score)
+- Uses mock/test data
+- Tests specific components:
+  * Augmented chunk generation
+  * MCQ creation
+  * Question verification
+  * Answer scoring
+- Outputs detailed logs to `test_model.log`
 
-To run the test model verification suite:
-
+To run the test model verification:
 ```bash
 python src/test_model_verification.py
 ```
 
-To test the workflow with a specific input file:
+### 2. Workflow Integration Test (`test_workflow.sh`)
 
+Integration testing focused on the complete system:
+- Tests the entire MCQ generation pipeline
+- Verifies integration between all components
+- Uses real PDF input and actual models
+- Tests the complete workflow:
+  * PDF to JSON conversion
+  * MCQ generation
+  * Answer generation
+  * Score computation
+- Uses actual model implementations (not test models)
+- Creates and processes temporary files
+
+To run the workflow test with a specific input:
 ```bash
-./src/test_workflow.sh -i input.pdf
+./src/test_workflow.sh -i input.pdf [-v]
 ```
 
-To test the workflow with verbose output:
+### Key Differences Between Test Components
 
-```bash
-./src/test_workflow.sh -i input.pdf -v
-```
+1. **Scope**: 
+   - `test_model_verification.py`: Unit testing of model functionality
+   - `test_workflow.sh`: Integration testing of the complete system
 
-### Test Coverage
+2. **Data Usage**:
+   - `test_model_verification.py`: Uses mock data
+   - `test_workflow.sh`: Uses real PDF input and actual data
 
-The test suite verifies:
-1. Text processing and enhancement
-2. MCQ generation
-3. Answer verification
-4. Response scoring
+3. **Model Usage**:
+   - `test_model_verification.py`: Uses test models with predefined responses
+   - `test_workflow.sh`: Uses actual deployed models
 
-Each test component produces detailed logs in `test_model.log` that can be used for debugging and verification.
+4. **Purpose**:
+   - `test_model_verification.py`: Verifies model implementation correctness
+   - `test_workflow.sh`: Verifies system integration and workflow
 
 ## Development Tools
 
 For developers working on extending the codebase:
 
 To extract Q&A pairs from JSON:
-
 ```bash
 python src/extract_qa.py -i input.json -o output.json
 ```
 
 To review the processing status of models:
-
 ```bash
 python src/review_status.py -o results_directory
 ```
 
 To run missing generates for specific models:
-
 ```bash
 python src/run_missing_generates.py -i input.json -o output_dir -a model_name
 ```
