@@ -146,31 +146,23 @@ def main():
     modelB_name = args.modelB_name
     modelB = Model(modelB_name)
 
-    # Load previously generated answers from Model A
-    #answer_file = os.path.join(output_dir, 'answers_' + modelA_name.replace('/', '+') + '.json')
-    # we are using jsonl now
+    # Load previously generated answers from Model A (in JSONL format)
     answer_file = os.path.join(output_dir, 'answers_' + modelA_name.replace('/', '+') + '.jsonl')
-
     config.logger.info(f'Looking for {answer_file}')
     if not os.path.exists(answer_file):
         config.logger.error(f'No answers file for {modelA_name}')
         config.initiate_shutdown("Initiating shutdown.")
-        #sys.exit(1)
-
     score_file = os.path.join(
         output_dir,
-        f'scores_{modelA_name.replace("/","+")}={modelB_name.replace("/","+")}.json'
+        f'scores_{modelA_name.replace("/","+")}={modelB_name.replace("/","+")}.jsonl'
     )
     if os.path.exists(score_file) and not args.force:
         config.logger.error(f"Score file already exists: {score_file}")
         config.initiate_shutdown("Initiating shutdown.")
-        #sys.exit(1)
 
-    #with open(answer_file, "r", encoding="utf-8") as f:
-    #    data = json.load(f)
+    # Read answer data in JSONL format (one JSON object per line)
     with open(answer_file, "r", encoding="utf-8") as f:
         data = [json.loads(line) for line in f if line.strip()]
-
 
     total_items = len(data)
     if use_progress_bar:
@@ -180,8 +172,7 @@ def main():
         pbar = NoOpTqdm(total=total_items)
 
     # We'll accumulate results in a buffer and write them periodically.
-    #SAVE_INTERVAL = 10
-    SAVE_INTERVAL = config.saveInterval # for simplicty, use the same value as for parallel_generate_answers
+    SAVE_INTERVAL = config.saveInterval  # Use same interval as parallel_generate_answers
     output_buffer = []
     scores_list = []
     eval_total_time = 0.0
@@ -242,7 +233,4 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        #config.logger.warning("EXIT: Execution interrupted by user")
         config.initiate_shutdown("User interrupt - initiating shutdown.")
-        #sys.exit(0)
-
