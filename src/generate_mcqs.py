@@ -145,7 +145,7 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
    # New code to check if shutdown has been requested
     #if config.bail_out:
     if config.shutdown_event.is_set():
-        config.logger.info(f"Graceful shutdown: Skipping chunk {chunknum} in file {filename}.")
+        config.logger.info(f"Shutting down: Skipping chunk {chunknum} in file {filename}.")
         return (filename, linenum, chunknum, None, False)
 
 
@@ -177,7 +177,7 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
 
     # Step 2: Generate the multiple-choice question
     if config.shutdown_event.is_set():
-        config.logger.info(f"Graceful shutdown: Skipping step 2 in chunk {chunknum} in file {filename}.")
+        config.logger.info(f"Shutting down: Skipping step 2 in chunk {chunknum} in file {filename}.")
         return (filename, linenum, chunknum, None, False)
     try:
         formatted_user_message_2 = config.user_message_2.format(augmented_chunk=augmented_chunk)
@@ -195,7 +195,7 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
 
     # Step 3: Verify the question and score it
     if config.shutdown_event.is_set():
-        config.logger.info(f"Graceful shutdown: Skipping step 3 in chunk {chunknum} in file {filename}.")
+        config.logger.info(f"Shutting down: Skipping step 3 in chunk {chunknum} in file {filename}.")
         return (filename, linenum, chunknum, None, False)
     try:
         formatted_user_message_3 = config.user_message_3.format(
@@ -256,7 +256,7 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
         """
         # Step 4: if needed
         if config.shutdown_event.is_set():
-            config.logger.info(f"Graceful shutdown: Skipping step 4 in chunk {chunknum} in file {filename}.")
+            config.logger.info(f"Shutting down: Skipping step 4 in chunk {chunknum} in file {filename}.")
             return (filename, linenum, chunknum, None, False)
         try:
             fixed_json_output = model.run(
