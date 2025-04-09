@@ -1,19 +1,27 @@
 # Changelog
 
-### v1.5 - xxYyy2025 (CeC)
+### v1.5 - 09Apr2025 (CeC)
 - generate\_mcqs
     - write all MCQs out after finishing each file, not by chunk
     - Improve ^C interrupt handling for things like model time outs
     - Write to a debug file when JSON parsing fails in case we want to investigate
 - model\_access
     - implement a "test" model to validate the workflow (including generate\_mcqs,
-      generate\_answers, and score\_answers) with a dummy model both for speed
+      generate\_answers, and score\_answers) with a stub model both for speed
       (local models are not so fast) and situations where no models are available
      (like working offline)
+    - timeout at 60s was hard-coded here - it's now a config variable in config.yml
 - generate\_answers
     - reads JSONL to match format of MCQS json files.
 - test\_model.py
-    - a stub model for testing
+    - a stub model for testing offline and without the delays associated with
+      actual model interactions.
+- src/README.md
+    - Documents the test infrastructure
+- src/test\_workflow.sh
+    - Runs through the workflow using just two models (A and B in config.yml)
+- src/test\_model\_verification.py
+    - Tests to ensure that the stub model works with each component in the workflow.
 
 ### v1.4 - 26Mar2025 (CeC)
 - Implemented a global "bail out" flag and checks before iniating new threads so that
