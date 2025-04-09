@@ -62,12 +62,13 @@ def main():
     parser.add_argument('-c', "--cache-dir", type=str,
                         default=os.getenv("HF_HOME"),
                         help="Custom cache directory for Hugging Face")
-    parser.add_argument('-i', '--input',  help='File containing MCQs',
-                        required=True)
-    parser.add_argument('-o', '--output', help='Output directory for results',
-                        default=config.results_dir)
-    parser.add_argument('-p', '--parallel', type=int, default=4,
-                        help='Number of parallel threads (default: 4)')
+    parser.add_argument('-i', '--input', help='File containing MCQs (default: first JSONL file in config.mcq_dir)',
+                        default=None)
+    parser.add_argument('-o', '--output', help='Output directory for results (default: config.results_dir)',
+                        default=None)
+    parser.add_argument('-p', '--parallel', type=int,
+                        default=config.defaultThreads,
+                        help=f'Number of parallel threads (default: {config.defaultThreads})')
     parser.add_argument('-q','--quiet',   action='store_true',
                         help='No progress bar or messages')
     parser.add_argument('-v','--verbose', action='store_true',
@@ -81,9 +82,31 @@ def main():
         os.environ["HF_HOME"] = args.cache_dir
         config.logger.info(f"Using Hugging Face cache directory: {args.cache_dir}")
 
-    json_file = args.input
-    output_dir = args.output
+    # Handle input file resolution based on config defaults
+    if args.input is None:
+        # Find first JSONL file in mcq_dir
+        mcq_files = [f for f in os.listdir(config.mcq_dir) if f.endswith('.jsonl')]
+        if not mcq_files:
+            config.logger.error(f"No JSONL files found in {config.mcq_dir}")
+            config.initiate_shutdown("Initiating shutdown.")
+        json_file = os.path.join(config.mcq_dir, mcq_files[0])
+        config.logger.info(f"Using default MCQ file: {json_file}")
+    else:
+        # If input arg provided, check if it's a full path or relative to mcq_dir
+        if os.path.isabs(args.input) or os.path.exists(args.input):
+            json_file = args.input
+        else:
+            json_file = os.path.join(config.mcq_dir, args.input)
 
+    # Handle output directory resolution
+    if args.output is None:
+        output_dir = config.results_dir
+        config.logger.info(f"Using default output directory: {output_dir}")
+    else:
+        output_dir = args.output
+
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
     model_name = args.model
     model = Model(model_name)
     model.details()
@@ -131,7 +154,6 @@ def main():
         os.remove(output_path)
 
     # Save results periodically every SAVE_INTERVAL items.
-    #SAVE_INTERVAL = 50
     SAVE_INTERVAL = config.saveInterval
     config.logger.info(f"Write to results file every {SAVE_INTERVAL} QA's processed.")
     output_buffer = []
