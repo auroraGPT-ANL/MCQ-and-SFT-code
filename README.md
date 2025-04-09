@@ -7,6 +7,8 @@ This repository provides Python programs for:
 * Fine-tuning models based on supplied data
 * Workflow tools for scientific paper analysis
 
+[View Workflow Flowchart](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/CeC/MCQ-Workflow.png)
+
 **Contact:** Please email {foster|stevens|catlett}@anl.gov if you see things that are unclear or missing.
 
 ## Table of Contents
