@@ -21,20 +21,21 @@ timeout:    45            # model query timeout
 # 
   #name:        "cafe:meta-llama/Llama-3.3-70B-Instruct"
   #name:        "cafe:llama31-405b-fp8"
-  #name:        "alcf:meta-llama/Meta-Llama-3-70B-Instruct"
-  #name:        "alcf:meta-llama/Meta-Llama-3-8B-Instruct"
   #name:        "alcf:argonne-private/AuroraGPT-Tulu3-SFT-0125"
   #name:        "alcf:argonne-private/AuroraGPT-IT-v4-0125"
+  #name:        "alcf:argonne-private/AuroraGPT-7B"
+  #name:        "argo:gpt4o"
   #name:        "pb:mistralai/Mistral-7B-Instruct-v0.3"
   #name:        "openai:gpt-4"
   #name:        "pb:argonne-private/Llama2-70B"
   #name:        "local:deepseek-r1-distill-llama-8b"
   #name:        "local:qwen2.5-7b-instruct-1m"
+  #name:        "local:qwen2.5-7b-instruct-1m"
 
 # this model is the default for Model-A for score_answers.py
 #
 model:
-  name:        "argo:gpt4o"
+  name:        "alcf:meta-llama/Meta-Llama-3-70B-Instruct"
   temperature:  0.7
   baseModel:   "None"
   Tokenizer:   "None"
@@ -42,16 +43,16 @@ model:
 # model-B for score_answers.py
 
 model_b:
-  name:        "local:qwen2.5-7b-instruct-1m"
+  name:         "argo:gpt4"
   temperature:  0.7
   baseModel:   "None"
   Tokenizer:   "None"
 
-#model_c:
-  #name:         "alcf:argonne-private/AuroraGPT-7B"
-#  temperature: 0.7
-#  baseModel: "None"
-#  Tokenizer: "None"
+model_c:
+  name:        "alcf:meta-llama/Meta-Llama-3-8B-Instruct"
+  temperature: 0.7
+  baseModel: "None"
+  Tokenizer: "None"
 
 #model_d:
   #name: "local:deepseek-r1-distill-llama-8b"
