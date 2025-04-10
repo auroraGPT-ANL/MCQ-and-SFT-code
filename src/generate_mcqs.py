@@ -52,9 +52,7 @@ def approximate_total_chunks(input_dir, output_dir, chunk_size=CHUNK_SIZE, force
     for f in os.listdir(input_dir):
         if not f.lower().endswith((".json", ".jsonl")):
             continue
-        # Use .jsonl extension for processed output.
-        out_filename = f'processed_{os.path.splitext(f)[0]}.jsonl'
-        output_file = os.path.join(output_dir, out_filename)
+        output_file = os.path.join(output_dir, f"processed_{f}")
         if os.path.exists(output_file) and not force:
             continue
         path = os.path.join(input_dir, f)
@@ -334,9 +332,7 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
     futures = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=parallel_workers) as executor:
         for filename in all_files:
-            # Use a JSONL extension for processed output.
-            out_filename = f'processed_{os.path.splitext(filename)[0]}.jsonl'
-            processed_file = os.path.join(output_dir, out_filename)
+            processed_file = os.path.join(output_dir, f'processed_{os.path.splitext(filename)[0]}.jsonl')
             if os.path.exists(processed_file) and not force:
                 config.logger.info(f"Skipping {filename} as processed file exists: {processed_file}")
                 continue
@@ -412,8 +408,8 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
     # Write out MCQs in JSONL format.
     os.makedirs(output_dir, exist_ok=True)
     for fname, qa_pairs in file_results.items():
-        out_filename = f'processed_{os.path.splitext(fname)[0]}.jsonl'
-        out_file = os.path.join(output_dir, out_filename)
+        base = os.path.splitext(fname)[0]
+        out_file = os.path.join(output_dir, f'processed_{base}.jsonl')
         config.logger.info(f"Writing {len(qa_pairs)} MCQs to {out_file}")
         try:
             if force:
