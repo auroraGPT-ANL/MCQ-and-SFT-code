@@ -15,10 +15,10 @@ from config import timeout, logger, initiate_shutdown
 
 from exceptions import APITimeoutError
 
-logger = logging.getLogger(__name__)
 
 OPENAI_EP  = 'https://api.openai.com/v1'
-ARGO_EP    = 'https://apps.inside.anl.gov/argoapi/api/v1/resource/chat/'
+ARGO_EP    = 'https://apps.inside.anl.gov/argoapi/api/v1/resource/chat'
+
 class Model:
     def __init__(self, model_name: str):
         """
@@ -36,7 +36,7 @@ class Model:
         self.model_name   = model_name
         self.base_model   = None        # Will be set if we load HF or something else
         self.tokenizer    = None
-        self.temperature  = 0.7         # A fallback default
+        self.temperature  = 0.7         # A fallback default but overriden by config.yml
 
         self.headers      = {'Content-Type': 'application/json'}
         self.endpoint     = None
@@ -44,7 +44,7 @@ class Model:
         self.key          = None
         self.client_socket = None
         self.status       = "UNKNOWN"
-        self.argo_user    = None  # Argonne domain username for Argo API
+        self.argo_user    = None        # filled in as needed for argo model types
         if model_name.startswith('local:'):
             self.model_name = model_name.split('local:')[1]
             logger.info(f"Local model: {model_name}.")
@@ -176,7 +176,9 @@ class Model:
             
             logger.info(f"Using Argo user: {self.argo_user}")
             self.endpoint = ARGO_EP
-            self.headers['user'] = self.argo_user
+            logger.info(f"Argo endpoint: {ARGO_EP}")
+            # Add dummy API key for OpenAI client compatibility
+            self.key = "sk-dummy-key-for-argo-models"
 
         elif model_name.startswith('test:'):
             """
@@ -305,33 +307,55 @@ class Model:
                 #sys.exit(1)
 
         elif self.model_type in ['OpenAI', 'ALCF', 'Argo']:
-            # Chat completions via openai or ALCF
-            client = OpenAI(
-                api_key=self.key,
-                base_url=self.endpoint
-            )
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": user_prompt}
-            ]
+            logger.info(f"Initializing {self.model_type} client with endpoint: {self.endpoint}")
             try:
-                response = client.chat.completions.create(
-                    model=self.model_name,
-                    messages=messages,
-                    temperature=temperature,
-                    timeout=timeout
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user",   "content": user_prompt}
+                ]
+                # Build request parameters
+                params = {
+                    "model": self.model_name,
+                    "messages": messages,
+                    "temperature": temperature
+                }
+
+                # For Argo models, add required parameters
+                if self.model_type == 'Argo':
+                    params["user"] = self.argo_user
+                    params["stop"] = []      # Include the stop parameter as per documentation
+                    params["top_p"] = 0.9    # Include the top_p parameter as per documentation
+
+                client = OpenAI(
+                    api_key=self.key,
+                    base_url=self.endpoint,
+                    timeout=timeout,
+                    max_retries=1
                 )
-                generated_text = response.choices[0].message.content.strip()
-                return generated_text
-            except APITimeoutError as e:
-                logger.info(f"OpenAI/ALCF request timed out: {str(e)[:80]}...") #not fatal so don't clutter
-                return ""
+
+                logger.info(f"Sending request to {self.model_type} endpoint...")
+                logger.info(f"Request details: model={self.model_name}, temperature={temperature}")
+
+
+                from requests.exceptions import Timeout
+                try:
+                    response = client.chat.completions.create(**params)
+                    logger.info("Response received from API")
+                    generated_text = response.choices[0].message.content.strip()
+                    return generated_text
+                except Timeout:
+                    logger.warning(f"{self.model_type} request timed out after {timeout} seconds")
+                    return ""
+                except APITimeoutError as e:
+                    logger.warning(f"{self.model_type} request timed out after {timeout} seconds: {str(e)[:80]}...")
+                    return ""
             except Exception as e:
                 if "401" in str(e) or "Unauthorized" in str(e):
+                    logger.error(f"{self.model_type} authentication failed: {str(e)[:80]}...")
                     initiate_shutdown("Model API Authentication failed. Exiting.")
-                    #sys.exit("Model API Authentication failed. Exiting.")
-                logger.info(f"OpenAI/ALCF request error: {str(e)[:80]}...")  # alert the user elsewhere if too many errs
+                logger.warning(f"{self.model_type} request error: {str(e)[:80]}...")
                 return ""
+
 
         elif self.model_type == 'CAFE':
                 # Handle CAFE models similarly to vLLM
