@@ -57,7 +57,7 @@ python src/combine_json_files.py -o MCQ-combined.json
 # If -n is specified, select a subset of MCQs at random
 if [ -n "$n_value" ]; then
     echo "Selecting $n_value MCQs at random..."
-    python src/select_mcqs_at_random.py -i MCQ-combined.json -o MCQ-subset.json -n "$n_value"
+    python src/select_mcqs_at_random.py -i MCQ-combined.jsonl -o MCQ-subset.jsonl -n "$n_value"
     input_file="MCQ-subset.json"
 else
     input_file="MCQ-combined.json"
@@ -71,7 +71,7 @@ echo "Generating answers with models: ${model_names}"
 
 # Generate answers for each model using the dynamic value for -p
 for (( i=1; i<=${#MODELS[@]}; i++ )); do
-    python src/generate_answers.py -i "$input_file" -m "${MODELS[i]}" -q -p "$p_value" $v_flag &
+    python src/generate_answers.py -i "$input_file" -m "${MODELS[i]}" -p "$p_value" $v_flag &
 done
 
 wait
@@ -82,7 +82,7 @@ for (( i=1; i<=${#MODELS[@]}; i++ )); do
     for (( j=1; j<=${#MODELS[@]}; j++ )); do
         if [ $i -ne $j ]; then
             echo "Begin scoring ${ALIASES[i]} answers using ${ALIASES[j]}..."
-            python src/score_answers.py -a "${MODELS[i]}" -b "${MODELS[j]}" -q -p "$p_value" $v_flag &
+            python src/score_answers.py -a "${MODELS[i]}" -b "${MODELS[j]}" -p "$p_value" $v_flag &
         fi
     done
 done
