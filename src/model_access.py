@@ -15,8 +15,8 @@ from config import timeout, logger, initiate_shutdown
 
 from exceptions import APITimeoutError
 
-
 OPENAI_EP  = 'https://api.openai.com/v1'
+# Use the Argo endpoint at the /chat level.
 ARGO_EP    = 'https://apps.inside.anl.gov/argoapi/api/v1/resource/chat'
 
 class Model:
@@ -36,7 +36,7 @@ class Model:
         self.model_name   = model_name
         self.base_model   = None        # Will be set if we load HF or something else
         self.tokenizer    = None
-        self.temperature  = 0.7         # A fallback default but overriden by config.yml
+        self.temperature  = 0.7         # A fallback default but overridden by config.yml
 
         self.headers      = {'Content-Type': 'application/json'}
         self.endpoint     = None
@@ -44,7 +44,8 @@ class Model:
         self.key          = None
         self.client_socket = None
         self.status       = "UNKNOWN"
-        self.argo_user    = None        # filled in as needed for argo model types
+        self.argo_user    = None        # filled in as needed for Argo model types
+
         if model_name.startswith('local:'):
             self.model_name = model_name.split('local:')[1]
             logger.info(f"Local model: {model_name}.")
@@ -76,7 +77,6 @@ class Model:
             if response != 'ok':
                 logger.warning(f"Unexpected response: {response}")
                 initiate_shutdown("Initiating shutdown.")
-                #sys.exit(1)
             logger.info("Model server initialized")
 
         elif model_name.startswith('hf:'):
@@ -126,12 +126,10 @@ class Model:
             if self.model_name not in alcf_chat_models:
                 logger.warning(f"Bad ALCF model: {self.model_name}")
                 initiate_shutdown("Initiating shutdown.")
-                #sys.exit(1)
             self.model_type = 'ALCF'
             self.endpoint   = 'https://data-portal-dev.cels.anl.gov/resource_server/sophia/vllm/v1'
             self.key        = token
 
-        # models Rick and Tom are running...
         elif model_name.startswith('cafe'):
             """
             Use Rick's Cafe Inference Service endpoint
@@ -142,10 +140,8 @@ class Model:
             # For now, simply set the token to a placeholder
             token = "CELS"
             self.model_type = 'CAFE'
-            #self.endpoint   = 'https://66.55.67.65/v1'
             self.endpoint   = 'https://195.88.24.64/v1'
             self.key        = token
-
 
         elif model_name.startswith('openai'):
             """
@@ -163,17 +159,17 @@ class Model:
             Use Argonne's Argo API service (OpenAI-compatible API)
             """
             from config import argo_user
-            
+
             self.model_name = model_name.split('argo:')[1]
             logger.info(f"Argo API model to be used: {self.model_name}")
-            self.model_type = 'Argo'  # Create a dedicated type for Argo
-            
+            self.model_type = 'Argo'
+
             # Get Argonne username from config (which loads from secrets.yml)
             self.argo_user = argo_user
             if not self.argo_user:
                 logger.warning("Argo username not found in config/secrets")
                 initiate_shutdown("Argo API requires authentication.")
-            
+
             logger.info(f"Using Argo user: {self.argo_user}")
             self.endpoint = ARGO_EP
             logger.info(f"Argo endpoint: {ARGO_EP}")
@@ -192,7 +188,7 @@ class Model:
             self.endpoint = None  # No endpoint needed
             self.temperature = 0.0  # Deterministic responses
             self.key = None
-            
+
             # Import the TestModel class here to avoid circular imports
             from test_model import TestModel
             self.test_model = TestModel(self.model_name)
@@ -200,7 +196,6 @@ class Model:
         else:
             logger.warning(f"Bad model: {model_name}")
             initiate_shutdown("Initiating shutdown.")
-            #sys.exit(1)
 
     def wait_for_job_to_start(self):
         """Monitor job status and get assigned compute node"""
@@ -263,13 +258,11 @@ class Model:
             temperature = self.temperature  # fallback
 
         if self.model_type == 'Huggingface':
-            # Local HF model
             from transformers import GenerationConfig
             logger.info(f"Generating with HF model: {self.model_name}")
             return run_hf_model(user_prompt, self.base_model, self.tokenizer)
 
         elif self.model_type == 'HuggingfacePBS':
-            # HPC job
             if self.status != "RUNNING":
                 raise RuntimeError("Model is not running. Ensure the PBS job is active.")
             if self.client_socket is None:
@@ -281,62 +274,44 @@ class Model:
             return response
 
         elif self.model_type == 'vLLM':
-            # local: vLLM-based endpoint
             data = {
                 "model": self.model_name,
                 "messages": [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user",   "content": user_prompt}
+                    {"role": "user", "content": user_prompt}
                 ],
                 "temperature": temperature
             }
             try:
                 logger.info(f'Running {self.endpoint} ')
-                                   #f'  Headers = {self.headers}\n'
-                                   #f'  Data = {json.dumps(data)}')
                 resp = requests.post(self.endpoint, headers=self.headers, data=json.dumps(data))
-                #logger.info(f"Raw response: {resp}")
                 response_json = resp.json()
-                #logger.info(f"Parsed JSON: {response_json}")
                 message = response_json['choices'][0]['message']['content']
-                #logger.info(f"Response message: {message}")
                 return message
             except Exception as e:
                 logger.warning(f"Exception: {str(e)[:80]}...")
                 initiate_shutdown("Initiating shutdown.")
-                #sys.exit(1)
 
-        elif self.model_type in ['OpenAI', 'ALCF', 'Argo']:
+        elif self.model_type in ['OpenAI', 'ALCF']:
             logger.info(f"Initializing {self.model_type} client with endpoint: {self.endpoint}")
             try:
                 messages = [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user",   "content": user_prompt}
+                    {"role": "user", "content": user_prompt}
                 ]
-                # Build request parameters
                 params = {
                     "model": self.model_name,
                     "messages": messages,
                     "temperature": temperature
                 }
-
-                # For Argo models, add required parameters
-                if self.model_type == 'Argo':
-                    params["user"] = self.argo_user
-                    params["stop"] = []      # Include the stop parameter as per documentation
-                    params["top_p"] = 0.9    # Include the top_p parameter as per documentation
-
                 client = OpenAI(
                     api_key=self.key,
                     base_url=self.endpoint,
                     timeout=timeout,
                     max_retries=1
                 )
-
                 logger.info(f"Sending request to {self.model_type} endpoint...")
                 logger.info(f"Request details: model={self.model_name}, temperature={temperature}")
-
-
                 from requests.exceptions import Timeout
                 try:
                     response = client.chat.completions.create(**params)
@@ -356,44 +331,83 @@ class Model:
                 logger.warning(f"{self.model_type} request error: {str(e)[:80]}...")
                 return ""
 
+        elif self.model_type == 'Argo':
+            # Direct POST using requests for Argo.
+            logger.info(f"Direct POST to Argo endpoint: {self.endpoint}")
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+            params = {
+                "model": self.model_name,
+                "messages": messages,
+                "temperature": temperature,
+                "user": self.argo_user,
+                "stop": [],
+                "top_p": 0.9
+            }
+            url = self.endpoint if self.endpoint.endswith('/') else self.endpoint + '/'
+            try:
+                resp = requests.post(url, headers=self.headers, data=json.dumps(params))
+                resp.raise_for_status()
+                response_json = resp.json()
+                if "choices" in response_json:
+                    generated_text = response_json['choices'][0]['message']['content'].strip()
+                    return generated_text
+                elif "response" in response_json:
+                    generated_text = response_json["response"]
+                    # Remove markdown formatting if present.
+                    if generated_text.startswith("```json"):
+                        generated_text = generated_text[len("```json"):].strip()
+                        if generated_text.endswith("```"):
+                            generated_text = generated_text[:-3].strip()
+                        try:
+                            parsed = json.loads(generated_text)
+                            if "answer" in parsed:
+                                generated_text = parsed["answer"].strip()
+                            else:
+                                generated_text = str(parsed)
+                        except Exception as parse_error:
+                            logger.warning(f"Failed to parse JSON from Argo response: {parse_error}")
+                    return generated_text
+                else:
+                    logger.warning(f"Argo response does not contain 'choices' or 'response': {response_json}")
+                    return str(response_json)
+            except Exception as e:
+                logger.warning(f"Argo direct POST request error: {str(e)[:80]}")
+                return ""
 
         elif self.model_type == 'CAFE':
-                # Handle CAFE models similarly to vLLM
-                data = {
-                    "model": self.model_name,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user",   "content": user_prompt}
-                    ],
-                    "temperature": temperature
-                }
-                try:
-                    logger.info(
-                        f'Running {self.endpoint}\n'
-                        f'  Headers = {self.headers}\n'
-                        f'  Data = {json.dumps(data)}'
-                    )
-                    resp = requests.post(self.endpoint, headers=self.headers, data=json.dumps(data))
-                    logger.info(f"Raw response: {resp}")
-                    response_json = resp.json()
-                    logger.info(f"Parsed JSON: {response_json}")
-                    message = response_json['choices'][0]['message']['content']
-                    logger.info(f"Response message: {message}")
-                    return message
-                except Exception as e:
-                    logger.warning(f"Exception: {str(e)[:80]}...")
-                    initiate_shutdown("Initiating shutdown.")
-                    #sys.exit(1)
+            data = {
+                "model": self.model_name,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": temperature
+            }
+            try:
+                logger.info(
+                    f'Running {self.endpoint}\n'
+                    f'  Headers = {self.headers}\n'
+                    f'  Data = {json.dumps(data)}'
+                )
+                resp = requests.post(self.endpoint, headers=self.headers, data=json.dumps(data))
+                logger.info(f"Raw response: {resp}")
+                response_json = resp.json()
+                logger.info(f"Parsed JSON: {response_json}")
+                message = response_json['choices'][0]['message']['content']
+                logger.info(f"Response message: {message}")
+                return message
+            except Exception as e:
+                logger.warning(f"Exception: {str(e)[:80]}...")
+                initiate_shutdown("Initiating shutdown.")
         elif self.model_type == 'Test':
-            # Test model - delegates to the TestModel class for predefined responses
             logger.info(f"Running test model with prompt: {user_prompt[:50]}...")
-            # Use the TestModel instance to generate the appropriate response
             return self.test_model.generate_response(user_prompt, system_prompt)
-
         else:
             logger.warning(f"Unknown model type: {self.model_type}")
             initiate_shutdown("Initiating shutdown.")
-            #sys.exit(1)
 
 def run_hf_model(input_text, base_model, tokenizer):
     """
@@ -403,7 +417,6 @@ def run_hf_model(input_text, base_model, tokenizer):
     if base_model is None or tokenizer is None:
         return "HF model or tokenizer not loaded."
 
-    # Prepare input for generation
     inputs = tokenizer(input_text, return_tensors="pt", padding=True)
     input_ids = inputs["input_ids"].to("cuda")
     attention_mask = inputs["attention_mask"].to("cuda")
@@ -414,7 +427,6 @@ def run_hf_model(input_text, base_model, tokenizer):
         max_length=512,
         pad_token_id=tokenizer.pad_token_id
     )
-
     generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
     return generated_text
 
