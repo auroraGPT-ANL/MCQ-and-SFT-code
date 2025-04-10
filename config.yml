@@ -21,20 +21,19 @@ timeout:    45            # model query timeout
 # 
   #name:        "cafe:meta-llama/Llama-3.3-70B-Instruct"
   #name:        "cafe:llama31-405b-fp8"
+  #name:        "alcf:meta-llama/Meta-Llama-3-70B-Instruct"
+  #name:        "alcf:meta-llama/Meta-Llama-3-8B-Instruct"
   #name:        "alcf:argonne-private/AuroraGPT-Tulu3-SFT-0125"
-  #name:        "pb:mistralai/Mistral-7B-Instruct-v0.3"
-  #name:        "local:deepseek-r1-distill-llama-8b"
   #name:        "alcf:argonne-private/AuroraGPT-IT-v4-0125"
-  #name:        "alcf:argonne-private/AuroraGPT-Tulu3-SFT-0125"
+  #name:        "pb:mistralai/Mistral-7B-Instruct-v0.3"
   #name:        "openai:gpt-4"
-  #name:        "local:deepseek-r1-distill-llama-8b"
   #name:        "pb:argonne-private/Llama2-70B"
+  #name:        "local:deepseek-r1-distill-llama-8b"
   #name:        "local:qwen2.5-7b-instruct-1m"
 
 # this model is the default for Model-A for score_answers.py
 #
 model:
-  #name:        "alcf:meta-llama/Meta-Llama-3-70B-Instruct"
   name:        "argo:gpt4o"
   temperature:  0.7
   baseModel:   "None"
@@ -43,7 +42,7 @@ model:
 # model-B for score_answers.py
 
 model_b:
-  name:        "alcf:meta-llama/Meta-Llama-3-8B-Instruct"
+  name:        "local:qwen2.5-7b-instruct-1m"
   temperature:  0.7
   baseModel:   "None"
   Tokenizer:   "None"
@@ -87,6 +86,11 @@ quality:
 # 
 # Iteration with model to generate MCQ Q/A pairs
 #
+#
+## Prompts for generate_mcqs.py
+# 
+# Iteration with model to generate MCQ Q/A pairs
+#
 
 prompts:
 
@@ -123,7 +127,7 @@ prompts:
 
   # Step 33
   system_message_3: |
-    You are a helpful assistant that evaluates how well an answer matches the question in context of the augmented_chunk. Return your evaluation strictly as valid JSON with no additional text, with precisely three key-value pairs: answer, score, and comment. No additional formatting or text shoud be included, just these three key-value pairs in valid JSON format.
+    You are a helpful assistant that evaluates how well an answer matches the question in context of the augmented_chunk. Return your evaluation strictly as valid JSON with no additional text, with precisely three key-value pairs: answer, score, and comment. No additional formatting or text should be included, just these three key-value pairs in valid JSON format.
   user_message_3: |
     augmented_chunk:
     {augmented_chunk}
@@ -132,20 +136,14 @@ prompts:
     {generated_question}
 
     Please provide, in JSON format:
-    1. An appropriate answer to the multiple-choice question above.
-    2. A single integer 'score' from 1 to 10 for how well the answer addresses the question based on the augmented_chunk.
-    3. A brief comment explaining why this answer is correct.
+    1. An appropriate answer to the multiple-choice question above. Report in JSON as the value for the key 'answer'.
+    2. A single integer 'score' from 1 to 10 for how well the answer addresses the question based on the augmented_chunk. Report in JSON as the value for the key 'score'.
+    3. A brief comment explaining why this answer is correct. Report in JSON as the value for the key 'comment'.
 
-    Output must be valid JSON with the three key-value pairs of answer, score, and comment.
+    Return a valid JSON object containing exactly three keys: 'answer', 'score', and 'comment'.
 
 #
-# ----------------------------------------------------------------
 # Prompts for score_answers.py
-# 
-# Iteration with model to generate MCQ Q/A pairs
-#
-# (see notes above regarding format of prompts w.r.t. the 
-# use of single quotes or curly brackets
 #
 scoring_prompts:
   main_system: "You are a strict grader. Respond with only the number."
@@ -156,15 +154,10 @@ scoring_prompts:
     Reference Answer: {reference_answer}
     User's Answer: {user_answer}
 
-    On a scale of 1 to 10 (10 = exactly matches the reference answer,
-    1 = completely incorrect), provide ONLY the numeric score that reflects
-    how well the User's Answer matches the Reference Answer. Provide just a number.
-    No extra text. No explanation. No formatting.
-
+    On a scale of 1 to 10 (10 = exactly matches the reference answer, 1 = completely incorrect), provide ONLY the numeric score that reflects how well the User's Answer matches the Reference Answer. Provide just a number.
   fallback_system: "Extract a single number"
   fallback_prompt: |
-    Extract a final answer from this user response. Sometimes this appears at the end
-    after the words "**Final Answer**", enclosed in the characters "[ \\boxed{{" and "}} ]".
+    Extract a final answer from this user response. Sometimes this appears at the end after the words "**Final Answer**", enclosed in the characters "[ \\boxed{{" and "}} ]".
     For example, "[ \\boxed{{3}} ]" for the answer "3".
 
     Here is the user response:
