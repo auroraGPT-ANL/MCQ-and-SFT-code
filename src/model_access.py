@@ -58,6 +58,7 @@ class Model:
             over sockets. This is specialized code for HPC job submission.
             """
             self.model_name   = model_name.split('pb:')[1]
+            logger.info(f"PB model: {model_name}.")
             self.model_type   = 'HuggingfacePBS'
             self.model_script = "run_model.pbs"
             self.job_id       = None
@@ -84,6 +85,7 @@ class Model:
             'Huggingface' local model approach, reading from huggingface_hub.
             """
             self.model_type = 'Huggingface'
+            logger.info(f"HF model: {model_name}.")
             from huggingface_hub import login
             from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -117,7 +119,7 @@ class Model:
             Use the ALCF Inference Service endpoint
             """
             self.model_name = model_name.split('alcf:')[1]
-            logger.info(f"ALCF Inference Service Model: {self.model_name}")
+            logger.info(f"ALCF (Sophia) Inference Service Model: {self.model_name}")
 
             from inference_auth_token import get_access_token
             token = get_access_token()
@@ -135,7 +137,7 @@ class Model:
             Use Rick's Cafe Inference Service endpoint
             """
             self.model_name = model_name.split('cafe:')[1]
-            logger.info(f"Rick's Cafe Inference Service Model: {self.model_name}")
+            logger.info(f"Rick's Cafe model: {self.model_name}")
 
             # For now, simply set the token to a placeholder
             token = "CELS"
@@ -148,7 +150,7 @@ class Model:
             Use OpenAI's API (e.g. GPT-3.5/4)
             """
             self.model_name = model_name.split('openai:')[1]
-            logger.info(f"OpenAI model to be run at OpenAI: {self.model_name}")
+            logger.info(f"OpenAI model (run at OpenAI): {self.model_name}")
             self.model_type = 'OpenAI'
             with open('openai_access_token.txt', 'r') as file:
                 self.key = file.read().strip()
@@ -161,7 +163,7 @@ class Model:
             from config import argo_user
 
             self.model_name = model_name.split('argo:')[1]
-            logger.info(f"Argo API model to be used: {self.model_name}")
+            logger.info(f"Argo API model: {self.model_name}")
             self.model_type = 'Argo'
 
             # Get Argonne username from config (which loads from secrets.yml)
@@ -170,9 +172,9 @@ class Model:
                 logger.warning("Argo username not found in config/secrets")
                 initiate_shutdown("Argo API requires authentication.")
 
-            logger.info(f"Using Argo user: {self.argo_user}")
+            #logger.info(f"Using Argo user: {self.argo_user}")
             self.endpoint = ARGO_EP
-            logger.info(f"Argo endpoint: {ARGO_EP}")
+            #logger.info(f"Argo endpoint: {ARGO_EP}")
             # Add dummy API key for OpenAI client compatibility
             self.key = "sk-dummy-key-for-argo-models"
 
@@ -183,7 +185,7 @@ class Model:
             Default is test:all (responds to all types)
             """
             self.model_name = model_name.split('test:')[1] if ':' in model_name else "all"
-            logger.info(f"Test model initialized: {self.model_name}")
+            logger.info(f"Test model (stub): {self.model_name}")
             self.model_type = 'Test'
             self.endpoint = None  # No endpoint needed
             self.temperature = 0.0  # Deterministic responses
@@ -259,7 +261,7 @@ class Model:
 
         if self.model_type == 'Huggingface':
             from transformers import GenerationConfig
-            logger.info(f"Generating with HF model: {self.model_name}")
+            #logger.info(f"Generating with HF model: {self.model_name}")
             return run_hf_model(user_prompt, self.base_model, self.tokenizer)
 
         elif self.model_type == 'HuggingfacePBS':
@@ -267,10 +269,10 @@ class Model:
                 raise RuntimeError("Model is not running. Ensure the PBS job is active.")
             if self.client_socket is None:
                 raise RuntimeError("Socket is not connected")
-            logger.info(f"Sending input to HPC model: {user_prompt}")
+            #logger.info(f"Sending input to HPC model: {user_prompt}")
             self.client_socket.sendall(user_prompt.encode())
             response = self.client_socket.recv(1024).decode()
-            logger.info(f"HPC model response: {response}")
+            #logger.info(f"HPC model response: {response}")
             return response
 
         elif self.model_type == 'vLLM':
@@ -283,7 +285,7 @@ class Model:
                 "temperature": temperature
             }
             try:
-                logger.info(f'Running {self.endpoint} ')
+                #logger.info(f'Running {self.endpoint} ')
                 resp = requests.post(self.endpoint, headers=self.headers, data=json.dumps(data))
                 response_json = resp.json()
                 message = response_json['choices'][0]['message']['content']
@@ -293,7 +295,7 @@ class Model:
                 initiate_shutdown("Initiating shutdown.")
 
         elif self.model_type in ['OpenAI', 'ALCF']:
-            logger.info(f"Initializing {self.model_type} client with endpoint: {self.endpoint}")
+            #logger.info(f"Initializing {self.model_type} client with model {self.model_name} and endpoint: {self.endpoint}")
             try:
                 messages = [
                     {"role": "system", "content": system_prompt},
@@ -310,12 +312,12 @@ class Model:
                     timeout=timeout,
                     max_retries=1
                 )
-                logger.info(f"Sending request to {self.model_type} endpoint...")
-                logger.info(f"Request details: model={self.model_name}, temperature={temperature}")
+                #logger.info(f"Sending request to {self.model_type} endpoint...")
+                #logger.info(f"Request details: model={self.model_name}, temperature={temperature}")
                 from requests.exceptions import Timeout
                 try:
                     response = client.chat.completions.create(**params)
-                    logger.info("Response received from API")
+                    #logger.info("Response received from API")
                     generated_text = response.choices[0].message.content.strip()
                     return generated_text
                 except Timeout:
@@ -333,7 +335,7 @@ class Model:
 
         elif self.model_type == 'Argo':
             # Direct POST using requests for Argo.
-            logger.info(f"Direct POST to Argo endpoint: {self.endpoint}")
+            #logger.info(f"Direct POST to Argo: {self.model_name} at {self.endpoint}")
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
