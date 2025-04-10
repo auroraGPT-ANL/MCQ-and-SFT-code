@@ -64,9 +64,13 @@ else
 fi
 
 echo "Step 3: Generate answers (all models)."
+# Build a single string with the actual model names
+model_names=$(printf "%s, " "${MODELS[@]}")
+model_names=${model_names%, }  # Remove trailing comma and space
+echo "Generating answers with models: ${model_names}"
+
 # Generate answers for each model using the dynamic value for -p
 for (( i=1; i<=${#MODELS[@]}; i++ )); do
-    echo "Begin generating answers with ${ALIASES[i]}..."
     python src/generate_answers.py -i "$input_file" -m "${MODELS[i]}" -q -p "$p_value" $v_flag &
 done
 
