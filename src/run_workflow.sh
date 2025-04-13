@@ -45,13 +45,13 @@ if (( ${#MODELS[@]} > 0 )); then
   done
 fi
 
-echo "Step 1: Convert PDF to JSON."
+echo "Step 1: Convert PDF to JSON ($(date))."
 python src/simple_parse.py
 
-echo "Step 1: Generate MCQs (${ALIASES[1]})."
+echo "Step 1: Generate MCQs (${ALIASES[1]}) ($(date))."
 python src/generate_mcqs.py -p "$p_value" $v_flag
 
-echo "Step 2: Combine JSON files."
+echo "Step 2: Combine JSON files ($(date))."
 python src/combine_json_files.py -o MCQ-combined.json
 
 # If -n is specified, select a subset of MCQs at random
@@ -63,7 +63,7 @@ else
     input_file="MCQ-combined.json"
 fi
 
-echo "Step 3: Generate answers (all models)."
+echo "Step 3: Generate answers (all models) ($(date))."
 # Build a single string with the actual model names
 model_names=$(printf "%s, " "${MODELS[@]}")
 model_names=${model_names%, }  # Remove trailing comma and space
@@ -76,7 +76,7 @@ done
 
 wait
 
-echo "Step 4: Score answers between all models."
+echo "Step 4: Score answers between all models ($(date))."
 # Score each model's answers using other models with the dynamic value for -p
 for (( i=1; i<=${#MODELS[@]}; i++ )); do
     for (( j=1; j<=${#MODELS[@]}; j++ )); do
@@ -89,5 +89,5 @@ done
 
 wait
 
-echo "Workflow completed."
+echo "Workflow completed ($(date))."
 
