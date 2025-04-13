@@ -149,9 +149,11 @@ scoring_prompts       = _config.get("scoring_prompts", {})
 score_main_system     = scoring_prompts.get("main_system", "")
 score_main_prompt     = scoring_prompts.get("main_prompt", "")
 score_fallback_system = scoring_prompts.get("fallback_system", "")
+score_fallback_system = scoring_prompts.get("fallback_system", "")
 score_fallback_prompt = scoring_prompts.get("fallback_prompt", "")
 
-# --- Other config values ---
+# --- Prompts for generate_nugget.py ---
+nugget_prompts         = _config.get("nugget_prompts", {})
 timeout               = _config.get("timeout", 60)      # model interaction time out for model_access.py
 quality               = _config.get("quality", {})
 minScore              = quality.get("minScore", 7)

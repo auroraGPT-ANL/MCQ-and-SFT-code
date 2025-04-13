@@ -1,4 +1,3 @@
-#
 ## Configuration
 #
 # Data files and directories
@@ -24,18 +23,18 @@ timeout:    45            # model query timeout
   #name:        "alcf:argonne-private/AuroraGPT-Tulu3-SFT-0125"
   #name:        "alcf:argonne-private/AuroraGPT-IT-v4-0125"
   #name:        "alcf:argonne-private/AuroraGPT-7B"
-  #name:        "argo:gpt4o"
   #name:        "pb:mistralai/Mistral-7B-Instruct-v0.3"
   #name:        "openai:gpt-4"
   #name:        "pb:argonne-private/Llama2-70B"
+  #name:        "local:qwen2.5-7b-instruct-1m"
+  #name:        "local:qwen2.5-7b-instruct-1m"
   #name:        "local:deepseek-r1-distill-llama-8b"
-  #name:        "local:qwen2.5-7b-instruct-1m"
-  #name:        "local:qwen2.5-7b-instruct-1m"
 
 # this model is the default for Model-A for score_answers.py
 #
 model:
-  name:        "alcf:meta-llama/Meta-Llama-3-70B-Instruct"
+  #name:        "alcf:meta-llama/Meta-Llama-3-70B-Instruct"
+  name:         "argo:gpt4"
   temperature:  0.7
   baseModel:   "None"
   Tokenizer:   "None"
@@ -43,22 +42,22 @@ model:
 # model-B for score_answers.py
 
 model_b:
-  name:         "argo:gpt4"
-  temperature:  0.7
-  baseModel:   "None"
-  Tokenizer:   "None"
+  name:        "argo:gpt4o"
+  temperature:   0.7
+  baseModel:    "None"
+  Tokenizer:    "None"
 
 model_c:
   name:        "alcf:meta-llama/Meta-Llama-3-8B-Instruct"
-  temperature: 0.7
-  baseModel: "None"
-  Tokenizer: "None"
+  temperature : 0.7
+  baseModel:   "None"
+  Tokenizer:   "None"
 
-#model_d:
-  #name: "local:deepseek-r1-distill-llama-8b"
-  #temperature: 0.7
-  #baseModel: "None"
-  #Tokenizer: "None"
+model_d:
+  name:        "alcf:mistralai/Mistral-7B-Instruct-v0.3"
+  temperature:  0.7
+  baseModel:   "None"
+  Tokenizer:   "None"
 
 # Argo API configuration
 argo:
@@ -102,13 +101,12 @@ prompts:
     Given the following chunk of text, please:
 
     1. Summarize the text in bullet points.
-    2. Expand on the summary using your parametric knowledge.
+    2. Expand on the summary using your parametric knowledge to create a 80-100 word synopsis of the chunk.
 
     Chunk:
     {chunk}
 
-    Return the result as plain text labeled 'augmented_chunk:' at the start.
-    
+    Return the result as a JSON object with key 'augmented_chunk' and the value should be your bullet points and comments.  The comments should be no longer than 100 words and should not include your reasoning narrative.
   # Step 2
   system_message_2: |
     You are a helpful assistant that generates exactly ONE multiple-choice question based on the provided text (augmented_chunk). The question must have 5 possible answers, numbered 1 to 5. Exactly one of these 5 choices is correct. Mark the correct choice with '(*)' at the end for later grading.
@@ -163,4 +161,56 @@ scoring_prompts:
 
     Here is the user response:
     {user_answer}
+
+#
+# Prompts for generate_nugget.py
+#
+nugget_prompts:
+  # Step 1: Metadata extraction
+  metadata_system: |
+    You are a helpful assistant that extracts paper metadata. 
+    Focus on finding the exact paper identifiers, title, and first author.
+    Look specifically for arXiv IDs, DOIs, or other unique identifiers.
+    Return the information in a specific JSON format.
+
+  metadata_user: |
+    From this text, extract:
+    1. Any paper identifiers (arXiv ID, DOI) that appear in the text
+    2. The complete paper title
+    3. The first author's full name
+
+    Return as a JSON object with "identifiers" (array), "title", and "first_author".
+    If you cannot find any field with certainty, use null.
+
+    Text:
+    {chunk}
+
+  # Step 2: DOI lookup
+  doi_system: |
+    You are a helpful assistant that finds DOIs for academic papers.
+    You have access to academic paper databases.
+    Only return a DOI if you are certain it matches both the title and first author exactly.
+
+  doi_user: |
+    Find the exact DOI for this academic paper:
+    Title: {title}
+    First Author: {first_author}
+
+    The paper appears to be about pervasive machine learning for HPC.
+    Return ONLY the DOI string. If you cannot find an exact match, return null.
+
+  # Step 3: Augmented chunk generation (same as generate_mcqs.py Step 1)
+  system_message: |
+    You are a helpful assistant that summarizes text in bullet points and expands on them using your broader knowledge. Name this result 'augmented_chunk'.
+
+  user_message: |
+    Given the following chunk of text, please:
+
+    1. Summarize the text in bullet points.
+    2. Expand on the summary using your parametric knowledge to create a 80-100 word synopsis of the chunk.
+
+    Chunk:
+    {chunk}
+
+    Return the result as a JSON object with key 'augmented_chunk' and the value should be your bullet points and comments.  The comments should be no longer than 100 words and should not include your reasoning narrative.
 
