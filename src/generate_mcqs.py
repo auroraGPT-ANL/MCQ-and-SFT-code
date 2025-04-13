@@ -43,6 +43,33 @@ def human_readable_time(seconds: float) -> str:
         return f"{days:.2f} days"
 
 
+def count_chunks_in_file(filepath, chunk_size=CHUNK_SIZE):
+    """
+    Reads a file (JSON or JSONL) and returns the total number of chunks
+    contained in it using the same split_text_into_chunks function.
+    """
+    total_chunks = 0
+    try:
+        with open(filepath, 'r', encoding='utf-8') as file:
+            if filepath.lower().endswith(".json"):
+                json_str = file.read()
+                lines = [json_str]
+            else:
+                lines = file.readlines()
+            for line in lines:
+                try:
+                    record = json.loads(line.strip())
+                    text = record.get('text', '')
+                    if text:
+                        chunks = split_text_into_chunks(text, chunk_size)
+                        total_chunks += len(chunks)
+                except json.JSONDecodeError:
+                    continue
+    except Exception as e:
+        config.logger.error(f"Failed to count chunks in file {filepath}: {e}")
+    return total_chunks
+
+
 def approximate_total_chunks(input_dir, output_dir, chunk_size=CHUNK_SIZE, force=False):
     """
     Estimate total chunks for files in input_dir.
@@ -52,8 +79,10 @@ def approximate_total_chunks(input_dir, output_dir, chunk_size=CHUNK_SIZE, force
     for f in os.listdir(input_dir):
         if not f.lower().endswith((".json", ".jsonl")):
             continue
-        output_file = os.path.join(output_dir, f"processed_{f}")
+        output_file = os.path.join(output_dir, f"processed_{os.path.splitext(f)[0]}.jsonl")
         if os.path.exists(output_file) and not force:
+            # Count the chunks in the already processed file
+            total_chunks += count_chunks_in_file(os.path.join(input_dir, f), chunk_size)
             continue
         path = os.path.join(input_dir, f)
         try:
@@ -298,8 +327,8 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
     """
     Process all JSON/JSONL files by scheduling each chunk as a separate task.
     If --force is not specified and a processed file exists for a given input file,
-    the file is skipped entirely. With --force, the file is reprocessed and the new MCQs
-    are appended to the existing output.
+    the file is skipped (and its chunk count is added as successful). With --force,
+    the file is reprocessed and the new MCQs are appended to the existing output.
     """
     json_files  = [f for f in os.listdir(input_dir) if f.lower().endswith(".json")]
     jsonl_files = [f for f in os.listdir(input_dir) if f.lower().endswith(".jsonl")]
@@ -313,7 +342,10 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
     overall_start_time = time.time()
 
     if json_files:
-        approximate_chunk_count = approximate_total_chunks(input_dir, output_dir, chunk_size=CHUNK_SIZE, force=force)
+        approximate_chunk_count = 0
+        for f in all_files:
+            filepath = os.path.join(input_dir, f)
+            approximate_chunk_count += count_chunks_in_file(filepath, CHUNK_SIZE)
         config.logger.info(f"\nTotal JSON files: {total_files}, ~{int(0.8 * approximate_chunk_count)}-{approximate_chunk_count} chunks\n")
     else:
         approximate_chunk_count = sum(1 for _ in open(os.path.join(input_dir, jsonl_files[0]), 'r', encoding='utf-8'))
@@ -333,11 +365,16 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
     with concurrent.futures.ThreadPoolExecutor(max_workers=parallel_workers) as executor:
         for filename in all_files:
             processed_file = os.path.join(output_dir, f'processed_{os.path.splitext(filename)[0]}.jsonl')
+            file_path = os.path.join(input_dir, filename)
             if os.path.exists(processed_file) and not force:
-                config.logger.info(f"Skipping {filename} as processed file exists: {processed_file}")
+                num_chunks = count_chunks_in_file(file_path, CHUNK_SIZE)
+                config.logger.info(f"Skipping {filename} as processed file exists: {processed_file} ({num_chunks} chunks counted as successful)")
+                pbar_total.update(num_chunks)
+                pbar_success.update(num_chunks)
+                with counter_lock:
+                    shared_counters["success"] += num_chunks
                 continue
 
-            file_path = os.path.join(input_dir, filename)
             try:
                 with open(file_path, 'r', encoding='utf-8') as file:
                     if filename.lower().endswith(".json"):
@@ -413,14 +450,12 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
         config.logger.info(f"Writing {len(qa_pairs)} MCQs to {out_file}")
         try:
             if force:
-                # With --force, append new MCQs to the file.
                 with config.output_file_lock:
                     with open(out_file, 'a', encoding='utf-8') as out_f:
                         for mcq in qa_pairs:
                             out_f.write(json.dumps(mcq, ensure_ascii=False) + "\n")
                 new_count = len(qa_pairs)
             else:
-                # Otherwise, merge with existing MCQs to avoid duplicates.
                 existing_mcqs = []
                 existing_ids = set()
                 if os.path.exists(out_file):
@@ -433,7 +468,7 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
                                     if mcq_id not in existing_ids:
                                         existing_mcqs.append(mcq)
                                         existing_ids.add(mcq_id)
-                                except json.JSONDecodeError as e:
+                                except json.JSONDecodeError:
                                     pass
                     except Exception as e:
                         if config.shutdown_event.is_set():
