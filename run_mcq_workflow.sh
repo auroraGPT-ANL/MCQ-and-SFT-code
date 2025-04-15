@@ -28,7 +28,7 @@ done
 set -e
 
 # List models from config.yml using the dynamic value for -p
-MODELS=("${(@f)$(python src/list_models.py -p "$p_value")}")
+MODELS=("${(@f)$(python -m common.list_models -p "$p_value")}")
 
 # Define aliases for up to 4 models (always at least two models)
 ALIASES[1]="Model A"
@@ -46,18 +46,18 @@ if (( ${#MODELS[@]} > 0 )); then
 fi
 
 echo "Step 1: Convert PDF to JSON ($(date))."
-python src/simple_parse.py
+python -m common.simple_parse
 
 echo "Step 1: Generate MCQs (${ALIASES[1]}) ($(date))."
-python src/generate_mcqs.py -p "$p_value" $v_flag
+python -m mcq_workflow.generate_mcqs -p "$p_value" $v_flag
 
 echo "Step 2: Combine JSON files ($(date))."
-python src/combine_json_files.py -o MCQ-combined.json
+python -m common.combine_json_files -o MCQ-combined.json
 
 # If -n is specified, select a subset of MCQs at random
 if [ -n "$n_value" ]; then
     echo "Selecting $n_value MCQs at random..."
-    python src/select_mcqs_at_random.py -i MCQ-combined.jsonl -o MCQ-subset.jsonl -n "$n_value"
+    python -m mcq_workflow.select_mcqs_at_random -i MCQ-combined.jsonl -o MCQ-subset.jsonl -n "$n_value"
     input_file="MCQ-subset.json"
 else
     input_file="MCQ-combined.json"
@@ -71,7 +71,7 @@ echo "Generating answers with models: ${model_names}"
 
 # Generate answers for each model using the dynamic value for -p
 for (( i=1; i<=${#MODELS[@]}; i++ )); do
-    python src/generate_answers.py -i "$input_file" -m "${MODELS[i]}" -p "$p_value" $v_flag &
+    python -m mcq_workflow.generate_answers -i "$input_file" -m "${MODELS[i]}" -p "$p_value" $v_flag &
 done
 
 wait
@@ -82,7 +82,7 @@ for (( i=1; i<=${#MODELS[@]}; i++ )); do
     for (( j=1; j<=${#MODELS[@]}; j++ )); do
         if [ $i -ne $j ]; then
             echo "Begin scoring ${ALIASES[i]} answers using ${ALIASES[j]}..."
-            python src/score_answers.py -a "${MODELS[i]}" -b "${MODELS[j]}" -p "$p_value" $v_flag &
+            python -m mcq_workflow.score_answers -a "${MODELS[i]}" -b "${MODELS[j]}" -p "$p_value" $v_flag &
         fi
     done
 done
