@@ -76,7 +76,7 @@ conda env update --name <your_conda_env> --file environment.yml
 Option 2: Create new environment
 ```bash
 conda env create -f environment.yml
-conda activate globus_env
+conda activate augpt_env
 ```
 
 4. **Populate \_PAPERS:** Place PDF-formatted input materials (e.g., scientific papers) into \_PAPERS.
