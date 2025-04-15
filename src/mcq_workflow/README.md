@@ -1,5 +1,13 @@
 # Source Code Documentation
 
+### Note this needs to be updated with the reorg of the repo, where modules are used
+Thus one should be able to run the python scripts such as *foo_bar.py* using
+```bash
+python -m foo_bar
+```
+(note omitting the *.py*)
+
+
 ## Main Workflow Components
 
 The `run_workflow.sh` script orchestrates the main workflow, which comprises several Python scripts executed in sequence:
