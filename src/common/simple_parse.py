@@ -6,7 +6,7 @@ import json
 import re
 import PyPDF2
 from pdfminer.high_level import extract_text
-import config
+from common import config
 import argparse
 from tqdm import tqdm
 

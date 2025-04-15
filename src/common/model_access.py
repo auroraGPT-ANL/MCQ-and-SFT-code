@@ -11,7 +11,7 @@ import requests
 import openai
 from openai import OpenAI
 import logging
-from common.config import timeout, logger, initiate_shutdown
+from common.config import timeout, logger, initiate_shutdown, argo_user
 
 from common.exceptions import APITimeoutError
 
@@ -160,7 +160,6 @@ class Model:
             """
             Use Argonne's Argo API service (OpenAI-compatible API)
             """
-            from config import argo_user
 
             self.model_name = model_name.split('argo:')[1]
             logger.info(f"Argo API model: {self.model_name}")
