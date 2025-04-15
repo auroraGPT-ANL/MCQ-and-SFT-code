@@ -4,14 +4,14 @@
 
 import config
 
-# Print all defined models
+# Print only models that have a defined name
 if config.defaultModel:
     print(config.defaultModel)
 if config.defaultModelB:
     print(config.defaultModelB)
-if config.model_c and config.model_c.get("name"):
+if getattr(config, 'model_c', None) and isinstance(config.model_c, dict) and config.model_c.get("name"):
     print(config.model_c["name"])
-if config.model_d and config.model_d.get("name"):
+if getattr(config, 'model_d', None) and isinstance(config.model_d, dict) and config.model_d.get("name"):
     print(config.model_d["name"])
 
 
