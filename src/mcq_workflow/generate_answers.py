@@ -11,7 +11,7 @@ import logging
 import concurrent.futures
 from tqdm import tqdm
 
-form common import config
+from common import config
 from common.model_access import Model
 
 def process_qa_item(qa_item, index, model):
