@@ -10,14 +10,14 @@ import time  # For timing
 from openai import OpenAI
 import spacy
 import argparse
-import config
+from common import config
 import logging
 from tqdm import tqdm  # For progress bars
 import concurrent.futures
 from concurrent.futures import TimeoutError
 import threading
 
-from model_access import Model
+from common.model_access import Model
 
 ##############################################################################
 # Global constants
