@@ -168,8 +168,7 @@ def main():
     if use_progress_bar:
         pbar = tqdm(total=total_items, desc="Processing", unit="item")
     else:
-        from config import NoOpTqdm
-        pbar = NoOpTqdm(total=total_items)
+        pbar = config.NoOpTqdm(total=total_items)
 
     SAVE_INTERVAL = config.saveInterval
     output_buffer = []
