@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# generate_nugget.py
+# generate_nuggets.py
 
 import os
 import sys
@@ -56,6 +56,7 @@ def count_chunks_in_file(filepath, chunk_size=CHUNK_SIZE):
                 lines = [json_str]
             else:
                 lines = file.readlines()
+            
             for line in lines:
                 try:
                     record = json.loads(line.strip())
@@ -323,6 +324,122 @@ def extract_abstract(chunk):
         config.logger.warning(f"Error extracting abstract: {e}")
         return None
 
+def deduplicate_facts(facts, model, similarity_threshold=0.88, confidence_threshold=0.5):
+    """
+    Cluster similar facts and filter low-confidence ones.
+    
+    Args:
+        facts (list): List of fact dictionaries with 'claim' keys
+        model (Model): The model instance to use for similarity comparison
+        similarity_threshold (float): Threshold above which facts are considered duplicates
+        confidence_threshold (float): Minimum confidence score to keep a fact
+        
+    Returns:
+        list: Filtered and de-duplicated list of facts
+    """
+    # First filter low-confidence facts
+    high_confidence_facts = [f for f in facts if f['confidence'] >= confidence_threshold]
+    if not high_confidence_facts:
+        return []
+        
+    unique_facts = []
+    
+    for fact in high_confidence_facts:
+        is_duplicate = False
+        for existing_fact in unique_facts:
+            # Use model to compare facts
+            response = model.run(
+                system_prompt=config.prompts['fact_comparison_system'],
+                user_prompt=config.prompts['fact_comparison_user'].format(
+                    fact1=fact['claim'],
+                    fact2=existing_fact['claim']
+                )
+            )
+            # Model returns similarity score and reasoning
+            try:
+                similarity_data = json.loads(response)
+                similarity = similarity_data['similarity_score']
+                
+                if similarity > similarity_threshold:
+                    # Keep the fact with higher confidence if they're duplicates
+                    if fact['confidence'] > existing_fact['confidence']:
+                        unique_facts.remove(existing_fact)
+                        is_duplicate = False
+                        break
+                    else:
+                        is_duplicate = True
+                        break
+            except (json.JSONDecodeError, KeyError) as e:
+                config.logger.warning(f"Error parsing similarity response: {e}")
+                continue
+                
+        if not is_duplicate:
+            unique_facts.append(fact)
+            
+    return unique_facts
+
+
+def extract_atomic_facts(chunk, model):
+    """
+    Extract atomic factual statements from a chunk of text.
+    
+    Args:
+        chunk (str): The text chunk to extract facts from
+        model (Model): The model instance to use for extraction
+        
+    Returns:
+        list: A list of dicts with structure: [{"claim": "...", "span": "...", "confidence": 0.95}]
+    """
+    try:
+        # Format and send the prompt to the model
+        formatted_user_message = config.prompts['fact_extraction_user'].format(chunk=chunk)
+        response = model.run(
+            user_prompt=formatted_user_message,
+            system_prompt=config.prompts['fact_extraction_system']
+        )
+        
+        # Parse the response as JSON
+        facts = json.loads(response)
+        
+        # Validate the response format
+        if not isinstance(facts, list):
+            config.logger.warning(f"Unexpected facts format (not a list): {facts}")
+            # Try to handle case where response is wrapped in another object
+            if isinstance(facts, dict) and any(k in facts for k in ['facts', 'claims', 'results']):
+                for key in ['facts', 'claims', 'results']:
+                    if key in facts and isinstance(facts[key], list):
+                        facts = facts[key]
+                        break
+            else:
+                # If we can't salvage the response, return an empty list
+                return []
+                
+        # Ensure each fact has the required keys
+        validated_facts = []
+        for fact in facts:
+            if isinstance(fact, dict) and 'claim' in fact and 'span' in fact and 'confidence' in fact:
+                # Ensure confidence is a float between 0 and 1
+                try:
+                    fact['confidence'] = float(fact['confidence'])
+                    if not (0 <= fact['confidence'] <= 1):
+                        fact['confidence'] = max(0, min(1, fact['confidence']))
+                except (ValueError, TypeError):
+                    fact['confidence'] = 0.5  # Default if invalid
+                    
+                validated_facts.append(fact)
+            else:
+                config.logger.warning(f"Skipping fact with missing required keys: {fact}")
+                
+        config.logger.info(f"Extracted {len(validated_facts)} valid facts from chunk")
+        return validated_facts
+        
+    except json.JSONDecodeError as e:
+        config.logger.warning(f"Failed to parse model response as JSON: {e}")
+        return []
+    except Exception as e:
+        config.logger.warning(f"Error extracting atomic facts: {e}")
+        return []
+
 
 def format_content(response):
     """Helper function to consistently format nugget content."""
@@ -386,8 +503,8 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
                   pbar_total, pbar_success, shared_counters, counter_lock, 
                   doi=None, is_first_chunk=False):
     """
-    Process a single chunk to generate an augmented version.
-    For the first chunk, extract the abstract instead of generating a summary.
+    Process a single chunk to extract atomic facts.
+    For the first chunk, extract the abstract instead of extracting facts.
     Returns a tuple: (filename, linenum, chunknum, result_dict or None, success_flag)
     """
     chunk_success = False
@@ -399,7 +516,7 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
 
     config.logger.info(f"Processing chunk {chunknum} in file {filename}.")
 
-    # Generate augmented chunk
+    # Extract atomic facts from chunk
     try:
         # For first chunk, try to extract abstract
         if is_first_chunk:
@@ -408,7 +525,8 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
                 if abstract:
                     nugget = {
                         "doi": doi,
-                        "augmented_chunk": abstract
+                        "abstract": abstract,
+                        "facts": []  # Empty facts list for abstract
                     }
                     chunk_success = True
                     config.logger.info("Successfully extracted abstract for first chunk")
@@ -417,23 +535,22 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
             except Exception as e:
                 config.logger.warning(f"Error extracting abstract: {e}, falling back to normal processing")
                 
-        # If not first chunk or abstract extraction failed, process normally
+        # If not first chunk or abstract extraction failed, extract atomic facts
         if not is_first_chunk or not chunk_success:
-            formatted_user_message = config.nugget_prompts['user_message'].format(chunk=chunk)
-            response = model.run(
-                user_prompt=formatted_user_message,
-                system_prompt=config.nugget_prompts['system_message']
-            )
+            # Extract atomic facts
+            facts = extract_atomic_facts(chunk, model)
             
-            # Use the helper function to format the content
-            augmented_chunk = format_content(response)
-            
-            # Create the nugget
+            # Create the nugget with extracted facts
             nugget = {
                 "doi": doi,
-                "augmented_chunk": augmented_chunk
+                "facts": facts
             }
             chunk_success = True
+            
+            # Only attempt local (chunk-level) deduplication if we have facts
+            if facts and len(facts) > 1:
+                facts = deduplicate_facts(facts, model, confidence_threshold=0.0)  # Don't filter by confidence yet
+                config.logger.info(f"Deduplicated to {len(facts)} unique facts within chunk")
     except Exception as e:
         if config.shutdown_event.is_set():
             config.logger.info("Shutdown in progress; suppressing error details.")
@@ -451,11 +568,53 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
     return (filename, linenum, chunknum, nugget, chunk_success)
 
 
+def write_nuggets_to_file(nuggets, output_file, append=True):
+    """
+    Write a list of nuggets to the output file.
+    
+    Args:
+        nuggets (list): List of nugget dictionaries to write
+        output_file (str): Path to the output file
+        append (bool): Whether to append to the file (True) or overwrite (False)
+    
+    Returns:
+        bool: True if successful, False if an error occurred
+    """
+    if not nuggets:
+        return True  # Nothing to write
+        
+    # Create output directory if it doesn't exist
+    output_dir = os.path.dirname(output_file)
+    if output_dir:  # If output_file includes a directory path
+        os.makedirs(output_dir, exist_ok=True)
+    
+    # Use atomic file operations with locking for thread safety
+    with config.output_file_lock:
+        try:
+            mode = 'a' if append else 'w'
+            config.logger.info(f"Writing {len(nuggets)} nuggets to {output_file}")
+            with open(output_file, mode, encoding='utf-8') as out_f:
+                for nugget in nuggets:
+                    # Ensure facts are present (even if empty) in the output
+                    if 'facts' not in nugget and 'augmented_chunk' in nugget:
+                        # Handle legacy format
+                        nugget['facts'] = []
+                    out_f.write(json.dumps(nugget, ensure_ascii=False) + "\n")
+            config.logger.info(f"Successfully wrote {len(nuggets)} nuggets to {output_file}")
+            return True
+        except Exception as e:
+            if config.shutdown_event.is_set():
+                config.logger.info("Shutdown in progress; suppressing error details.")
+            else:
+                config.logger.error(f"Failed to write output file {output_file}: {e}")
+            return False
+
+
 def process_directory(model, input_dir: str, output_file: str = "nuggets.jsonl",
                       use_progress_bar: bool = True, parallel_workers: int = 4):
     """
     Process all JSON/JSONL files by scheduling each chunk as a separate task.
-    All augmented chunks are written to a single output file (nuggets.jsonl).
+    Nuggets are written to the output file incrementally after each file is processed.
     """
     json_files  = [f for f in os.listdir(input_dir) if f.lower().endswith(".json")]
     jsonl_files = [f for f in os.listdir(input_dir) if f.lower().endswith(".jsonl")]
@@ -473,13 +632,14 @@ def process_directory(model, input_dir: str, output_file: str = "nuggets.jsonl",
 
     counter_lock = threading.Lock()
     shared_counters = {"success": 0, "failure": 0}
-    nugget_results = []
-    
     # Cache for paper DOIs and titles
     paper_metadata = {}
     
-    # Maps filename -> set of (linenum, chunknum) tuples
-    processed_chunks = {}
+    # Counter for total nuggets processed
+    total_nuggets_processed = 0
+    
+    # Track all facts for global deduplication
+    all_facts = []
 
     if use_progress_bar:
         pbar_total = tqdm(total=approximate_chunk_count, desc=" Processed", position=0, unit="chunk")
@@ -586,6 +746,16 @@ def process_directory(model, input_dir: str, output_file: str = "nuggets.jsonl",
                     config.logger.error(f"Failed to read file {filename}: {e}")
                     continue
 
+            # Process each file completely, one at a time
+            file_futures = []
+            file_nuggets = []
+            
+            # Get metadata for this file
+            file_doi = None
+            if filename in paper_metadata:
+                file_doi = paper_metadata[filename].get('doi')
+                
+            # Process all chunks from the current file
             for linenum, line in enumerate(lines, start=1):
                 if config.shutdown_event.is_set():
                     config.logger.info("Shutdown in progress: stopping submission of new tasks (file loop).")
@@ -606,11 +776,6 @@ def process_directory(model, input_dir: str, output_file: str = "nuggets.jsonl",
                         config.logger.info("Shutdown in progress: stopping submission of new tasks (chunk loop).")
                         break
                         
-                    # Get metadata for this file
-                    file_doi = None
-                    if filename in paper_metadata:
-                        file_doi = paper_metadata[filename].get('doi')
-                    
                     # Pass is_first_chunk=True for the first chunk of each file
                     future = executor.submit(process_chunk, model, filename, rec_path,
                                              linenum, chunknum, chunk,
@@ -618,26 +783,105 @@ def process_directory(model, input_dir: str, output_file: str = "nuggets.jsonl",
                                              shared_counters, counter_lock,
                                              file_doi,
                                              is_first_chunk=(linenum==1 and chunknum==1))
-                    futures.append(future)
-        for future in concurrent.futures.as_completed(futures):
-            try:
-                fname, linenum, chunknum, nugget, success = future.result(timeout=75)
-                if nugget is not None:
-                    chunk_id = (linenum, chunknum)
-                    if fname not in processed_chunks:
-                        processed_chunks[fname] = set()
-                    if chunk_id not in processed_chunks[fname]:
-                        nugget_results.append(nugget)
-                        processed_chunks[fname].add(chunk_id)
-            except TimeoutError:
-                config.logger.warning("Chunk processing task timed out after 75s")
-            except Exception as e:
-                if config.shutdown_event.is_set():
-                    config.logger.info("Shutdown in progress; suppressing error details.")
-                    return
+                    file_futures.append(future)
+                    
+            # Wait for all chunks from this file to complete
+            processed_chunks = set()  # Track processed chunks for this file
+            for future in concurrent.futures.as_completed(file_futures):
+                try:
+                    fname, linenum, chunknum, nugget, success = future.result(timeout=75)
+                    if nugget is not None:
+                        chunk_id = (linenum, chunknum)
+                        if chunk_id not in processed_chunks:
+                            file_nuggets.append(nugget)
+                            processed_chunks.add(chunk_id)
+                except TimeoutError:
+                    config.logger.warning(f"Chunk processing task for {filename} timed out after 75s")
+                except Exception as e:
+                    if config.shutdown_event.is_set():
+                        config.logger.info("Shutdown in progress; suppressing error details.")
+                        continue
+                    else:
+                        config.logger.error(f"Error processing a chunk in {filename}: {e}")
+            
+            # Write nuggets for this file immediately
+            # Write nuggets for this file immediately
+            if file_nuggets:
+                # Perform global deduplication across all facts
+                all_file_facts = []
+                for nugget in file_nuggets:
+                    all_file_facts.extend(nugget.get('facts', []))
+                
+                if all_file_facts:
+                    # Get the current DOI
+                    current_doi = file_nuggets[0].get('doi')
+                    
+                    # Apply confidence filtering and local deduplication
+                    local_unique_facts = deduplicate_facts(
+                        all_file_facts, 
+                        model, 
+                        similarity_threshold=0.88,
+                        confidence_threshold=0.5
+                    )
+                    
+                    config.logger.info(f"File {filename}: {len(all_file_facts)} facts -> {len(local_unique_facts)} unique facts after local deduplication")
+                    
+                    # If we have previous facts, perform global deduplication
+                    if all_facts:
+                        # Check new facts against all previous facts
+                        combined_facts = local_unique_facts + all_facts
+                        global_unique_facts = deduplicate_facts(
+                            combined_facts,
+                            model,
+                            similarity_threshold=0.88,
+                            confidence_threshold=0.5
+                        )
+                        
+                        # Identify truly new facts (not in all_facts)
+                        new_facts = []
+                        for fact in global_unique_facts:
+                            # Check if this fact is from the current file (not in all_facts)
+                            is_new = True
+                            for old_fact in all_facts:
+                                if fact['claim'] == old_fact['claim'] and fact['span'] == old_fact['span']:
+                                    is_new = False
+                                    break
+                            if is_new:
+                                new_facts.append(fact)
+                        
+                        config.logger.info(f"File {filename}: Found {len(new_facts)} new facts after global deduplication")
+                        
+                        # Update the global facts collection
+                        all_facts = global_unique_facts
+                        
+                        # Create nugget with just the new facts from this file
+                        if new_facts:
+                            file_nugget = {
+                                'doi': current_doi,
+                                'facts': new_facts
+                            }
+                            write_nuggets_to_file([file_nugget], output_file)
+                            total_nuggets_processed += 1
+                    else:
+                        # First file being processed - all facts are new
+                        all_facts = local_unique_facts
+                        
+                        # Create nugget with all unique facts from this file
+                        file_nugget = {
+                            'doi': current_doi,
+                            'facts': local_unique_facts
+                        }
+                        write_nuggets_to_file([file_nugget], output_file)
+                        total_nuggets_processed += 1
                 else:
-                    config.logger.error(f"Error processing a chunk: {e}")
-
+                    # No facts in this file, just write the original nuggets
+                    write_nuggets_to_file(file_nuggets, output_file)
+                    total_nuggets_processed += len(file_nuggets)
+                    
+                file_nuggets.clear()  # Free memory
+                
+            # Clear futures for this file
+            file_futures.clear()
     if use_progress_bar:
         remaining = pbar_total.total - pbar_total.n
         if remaining > 0:
@@ -645,31 +889,12 @@ def process_directory(model, input_dir: str, output_file: str = "nuggets.jsonl",
         pbar_total.close()
         pbar_success.close()
 
-    # Write out all nuggets to a single JSONL file
-    output_dir = os.path.dirname(output_file)
-    if output_dir:  # If output_file includes a directory path
-        os.makedirs(output_dir, exist_ok=True)
-    
-    config.logger.info(f"Writing {len(nugget_results)} nuggets to {output_file}")
-    try:
-        with open(output_file, 'a', encoding='utf-8') as out_f:
-            for nugget in nugget_results:
-                out_f.write(json.dumps(nugget, ensure_ascii=False) + "\n")
-        config.logger.info(f"Successfully wrote {len(nugget_results)} nuggets to {output_file}")
-    except Exception as e:
-        if config.shutdown_event.is_set():
-            config.logger.info("Shutdown in progress; suppressing error details.")
-            return
-        else:
-            config.logger.error(f"Failed to write output file {output_file}: {e}")
-
-    nugget_results.clear()
     overall_end_time = time.time()
     total_time = overall_end_time - overall_start_time
     config.logger.info(
         f"Processed {total_files} files in {human_readable_time(total_time)}.\n"
         f"Shared counters: {shared_counters}\n"
-        f"Nuggets saved to {output_file}."
+        f"Total nuggets saved to {output_file}: {total_nuggets_processed}"
     )
 
 
