@@ -107,6 +107,59 @@ prompts:
     {chunk}
 
     Return the result as a JSON object with key 'augmented_chunk' and the value should be your bullet points and comments.  The comments should be no longer than 100 words and should not include your reasoning narrative.
+
+  # Step 4: Atomic fact extraction (for identifying novel facts)
+  fact_extraction_system: |
+    You are a precise fact extractor that identifies atomic, verifiable factual statements in scientific text.
+    An atomic fact is a single, standalone claim that can be verified as true or false.
+    Focus on extracting specific claims, findings, methodologies, and results.
+    Return your output in a structured JSON format.
+
+  fact_extraction_user: |
+    Extract atomic factual statements expressed or implied in this text:
+
+    {chunk}
+
+    For each fact, provide:
+    1. The specific claim as a single complete sentence
+    2. The text span it was derived from (exact quote from the source)
+    3. Your confidence (0.0-1.0) that this is a factual statement
+
+    Return as a JSON array of objects with these exact keys:
+    - "claim": The specific factual statement
+    - "span": The source text span this is derived from
+    - "confidence": Your confidence score (0.0-1.0)
+
+    IMPORTANT GUIDELINES:
+    - Extract 3-7 key facts from this text
+    - Focus on specific, technical claims rather than general statements
+    - Include numerical findings and specific methodologies when present
+    - Aim for high precision - only include clearly factual statements
+    - Return valid JSON that can be parsed directly
+
+  # Step 5: Fact validation (to assess if facts are actually valid claims)
+  fact_validation_system: |
+    You are a fact-checking assistant that assesses the validity of factual claims.
+    You evaluate how precise, accurate, and well-supported each claim is based on the provided evidence.
+    You provide clear confidence scores based on factual validity.
+    Return your assessment in a structured JSON format.
+
+  fact_validation_user: |
+    Carefully assess each of the following factual claims extracted from a scientific text.
+    For each claim, evaluate:
+    1. Is it a precise, specific statement that could be verified?
+    2. Is it properly supported by the provided span of text?
+    3. Is it formulated as a clear, standalone fact?
+
+    Claims to evaluate:
+    {claims_json}
+
+    For each claim, provide:
+    - Revised claim text (if needed for clarity/precision)
+    - Adjusted confidence score (0.0-1.0)
+    - Brief reason for your assessment
+
+    Return as a JSON array maintaining the same structure as the input, but with potentially revised claims and confidence scores.
   # Step 2
   system_message_2: |
     You are a helpful assistant that generates exactly ONE multiple-choice question based on the provided text (augmented_chunk). The question must have 5 possible answers, numbered 1 to 5. Exactly one of these 5 choices is correct. Mark the correct choice with '(*)' at the end for later grading.

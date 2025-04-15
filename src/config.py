@@ -144,6 +144,10 @@ user_message_2        = prompts.get("user_message_2", "")
 system_message_3      = prompts.get("system_message_3", "")
 user_message_3        = prompts.get("user_message_3", "")
 
+# --- Fact extraction prompts ---
+fact_extraction_system = prompts.get("fact_extraction_system", "")
+fact_extraction_user = prompts.get("fact_extraction_user", "")
+
 # --- Scoring prompts for score_answers.py ---
 scoring_prompts       = _config.get("scoring_prompts", {})
 score_main_system     = scoring_prompts.get("main_system", "")
