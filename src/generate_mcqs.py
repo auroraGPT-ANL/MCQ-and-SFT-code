@@ -227,7 +227,7 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
     qa_pair = None
 
     if config.shutdown_event.is_set():
-        config.logger.info(f"Shutting down: Skipping chunk {chunknum} in file {filename}.")
+        #config.logger.info(f"Shutting down: Skipping chunk {chunknum} in file {filename}.")
         return (filename, linenum, chunknum, None, False)
 
     config.logger.info(f"Processing chunk {chunknum} in file {filename}.")
@@ -257,7 +257,7 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
 
     # Step 2: Generate the multiple-choice question.
     if config.shutdown_event.is_set():
-        config.logger.info(f"Shutting down: Skipping step 2 in chunk {chunknum} in file {filename}.")
+        #config.logger.info(f"Shutting down: Skipping step 2 in chunk {chunknum} in file {filename}.")
         return (filename, linenum, chunknum, None, False)
     try:
         formatted_user_message_2 = config.user_message_2.format(augmented_chunk=augmented_chunk)
@@ -275,7 +275,7 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
 
     # Step 3: Verify the question and score it.
     if config.shutdown_event.is_set():
-        config.logger.info(f"Shutting down: Skipping step 3 in chunk {chunknum} in file {filename}.")
+        #config.logger.info(f"Shutting down: Skipping step 3 in chunk {chunknum} in file {filename}.")
         return (filename, linenum, chunknum, None, False)
     try:
         formatted_user_message_3 = config.user_message_3.format(
