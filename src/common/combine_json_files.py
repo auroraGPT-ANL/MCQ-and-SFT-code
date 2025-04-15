@@ -5,11 +5,11 @@
 import json
 from pathlib import Path
 import argparse
-import config
+import common.config
 
 # Set up argument parsing
 parser = argparse.ArgumentParser(description="Combine MCQ files (JSON and JSONL) into a single JSONL file.")
-parser.add_argument('-i', '--input', help='Directory containing input MCQ files', default=config.mcq_dir)
+parser.add_argument('-i', '--input', help='Directory containing input MCQ files', default=common.config.mcq_dir)
 parser.add_argument('-o', '--output', help='Output file for combined MCQs (JSONL format)')
 
 args = parser.parse_args()
