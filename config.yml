@@ -40,10 +40,12 @@ model:
   Tokenizer:   "None"
 
 # model-B for score_answers.py
+# model-B also the model whose knowledge is tested w.r.t. factoid nuggets
+#         (note Temperature=0 is necessary)
 
 model_b:
   name:        "argo:gpt4o"
-  temperature:   0.7
+  temperature:   0.0
   baseModel:    "None"
   Tokenizer:    "None"
 
