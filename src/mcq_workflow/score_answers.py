@@ -12,8 +12,8 @@ import logging
 import concurrent.futures
 from tqdm import tqdm
 
-import config
-from model_access import Model
+from common import config
+from common.model_access import Model
 
 def score_answer(index, model, question: str, reference_answer: str, user_answer: str) -> float:
     """
