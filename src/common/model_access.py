@@ -11,9 +11,9 @@ import requests
 import openai
 from openai import OpenAI
 import logging
-from config import timeout, logger, initiate_shutdown
+from common.config import timeout, logger, initiate_shutdown
 
-from exceptions import APITimeoutError
+from common.exceptions import APITimeoutError
 
 OPENAI_EP  = 'https://api.openai.com/v1'
 # Use the Argo endpoint at the /chat level.
