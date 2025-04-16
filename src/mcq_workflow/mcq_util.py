@@ -333,7 +333,7 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
     # Compute approximate chunk count.
     if json_files:
         approximate_chunk_count = sum(count_chunks_in_file(os.path.join(input_dir, f), CHUNK_SIZE) for f in all_files)
-        config.logger.info(f"\nTotal JSON files: {total_files}, approximately {approximate_chunk_count} chunks\n")
+        config.logger.info(f"{total_files} JSON files, ~ {approximate_chunk_count} chunks\n")
     else:
         approximate_chunk_count = sum(1 for _ in open(os.path.join(input_dir, jsonl_files[0]), 'r', encoding='utf-8'))
 
