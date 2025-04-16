@@ -19,6 +19,8 @@ dependencies:
  - zlib=1.2.13
  - jq
  - pip:
+   - huggingface_hub
+   - transformers
    - annotated-types==0.7.0
    - anyio==4.8.0
    - blis==1.2.0
