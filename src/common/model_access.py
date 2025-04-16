@@ -13,8 +13,8 @@ from openai import OpenAI
 import logging
 from common.config import timeout, logger, initiate_shutdown, argo_user
 from common.inference_auth_token import get_access_token
-
 from common.exceptions import APITimeoutError
+from common.alcf_inference_utilities import get_names_of_alcf_chat_models
 
 OPENAI_EP  = 'https://api.openai.com/v1'
 # Use the Argo endpoint at the /chat level.
@@ -123,7 +123,6 @@ class Model:
             logger.info(f"ALCF (Sophia) Inference Service Model: {self.model_name}")
 
             token = get_access_token()
-            from alcf_inference_utilities import get_names_of_alcf_chat_models
             alcf_chat_models = get_names_of_alcf_chat_models(token)
             if self.model_name not in alcf_chat_models:
                 logger.warning(f"Bad ALCF model: {self.model_name}")
