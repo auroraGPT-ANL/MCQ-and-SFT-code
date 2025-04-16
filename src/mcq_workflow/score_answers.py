@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# parallel_score_answers.py
+# score_answers.py
 
 import sys
 import json
@@ -157,8 +157,7 @@ def main():
         f'scores_{modelA_name.replace("/","+")}={modelB_name.replace("/","+")}.jsonl'
     )
     if os.path.exists(score_file) and not args.force:
-        config.logger.info(f"Score file already exists: {score_file}")
-        #config.initiate_shutdown("Initiating shutdown.")
+        config.logger.info(f"Skipping {score_file} (already exists)")
 
     with open(answer_file, "r", encoding="utf-8") as f:
         data = [json.loads(line) for line in f if line.strip()]
