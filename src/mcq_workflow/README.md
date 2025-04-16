@@ -1,14 +1,8 @@
 # Source Code Documentation
 
-### Note this needs to be updated with the reorg of the repo, where modules are used
-Thus one should be able to run the python scripts such as *foo_bar.py* using
-```bash
-python -m foo_bar
-```
-(note omitting the *.py*)
+## This README is under construction post-reorg (needs to be updated with modules schema vs. standalone python as originally)
 
-
-## Main Workflow Components
+## Main MCQ Workflow Components
 
 The `run_workflow.sh` script orchestrates the main workflow, which comprises several Python scripts executed in sequence:
 
