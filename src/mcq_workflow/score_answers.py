@@ -148,7 +148,7 @@ def main():
 
     # Load answer data in JSONL format (one JSON object per line)
     answer_file = os.path.join(output_dir, 'answers_' + modelA_name.replace('/', '+') + '.jsonl')
-    config.logger.info(f'Looking for {answer_file}')
+    #config.logger.info(f'Looking for {answer_file}')
     if not os.path.exists(answer_file):
         config.logger.error(f'No answers file for {modelA_name}')
         config.initiate_shutdown("Initiating shutdown.")
