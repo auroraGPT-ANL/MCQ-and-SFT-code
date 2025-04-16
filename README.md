@@ -163,16 +163,16 @@ or to specify a different model than in *config.yml*:
 ```bash
 python -m mcq_workflow.generate_mcqs -m 'alcf:mistralai/Mistral-7B-Instruct-v0.3'
 ```
-(noting that models are specified as *location*:*model_name* - see **Additional Notes** below)
+(noting that models are specified as *location*:*model_name* - see **Configuration** below)
 
 #### 3. Combine MCQ JSON Files
 ```bash
-python -m combine_json_files -o MCQ-combined.json
+python -m common.combine_json_files -o MCQ-combined.json
 ```
 
 #### 4. Select MCQ Subset (Optional)
 ```bash
-python -m select_mcqs_at_random -i MCQ-combined.json -o MCQ-subset.json -n 17
+python -m common.select_mcqs_at_random -i MCQ-combined.json -o MCQ-subset.json -n 17
 ```
 
 #### 5. Generate Answers
@@ -293,6 +293,7 @@ python -m common/inference_auth_token authenticate --force
 If no models are running, then you'll need to invoke one (and wait 10-15 minutes) using 
 one of the codes below (generate\_mcqs.py, generate\_answers.py, score\_answers.py). They will
 time out and you'll need to ^C interrupt them, but this will queue up a model to run. 
+
 ## Notes
 
 - Authenticate periodically with the ALCF inference service
@@ -305,7 +306,7 @@ time out and you'll need to ^C interrupt them, but this will queue up a model to
 - [AdaParse Parser (Alternative PDF Parsing)](https://github.com/7shoe/AdaParse/tree/main)
 
 
-### Below this point the paths, etc. are outdated and need to be fixed
+# Below this point are outdated readme sections that need overhaul 
 
 ## Additional Notes
 - This pipeline ensures **high-quality multiple-choice questions** are generated and scored using AI.
