@@ -2,25 +2,30 @@
 
 ### v2.0 - xxYYYr2025
 - major reorg of src directory as follows:
-     - moved common code such as config, model helpers, utils to common/
-     - moved mcq generation, answer, scoring, etc. workflow (original workflow) to mcq\_workflow/
-     - moved new knowledge (nugget) extraction workflow - new - to nugget\_workflow/
+     - src/common: common code such as config, model helpers, utils 
+     - src/mcq\_workflow: mcq generation, answer, scoring, etc. workflow (original workflow) 
+     - src/nke\_workflow: *n*ew knowledge (nugget) extraction workflow - new - to nugget\_workflow/
      - moved tuning scripts into src/tuning
-- Implemented a modules approach with the understading that users would run all scripts
+- Implemented a Python modules approach. Users will typically run all scripts
   from the repo root directory, invoking the scripts with "python -m modulename.scriptname"
   for the script at "src/modulename/scriptname.py"
      - internal changes such as changing from "import config" to "import common.config"
      - various other details re paths, etc.
+- Shell script run\_mcq\_workflow is in the root directory, where the user data directories
+  also live (_PAPERS, _JSON, _MCQ, _RESULTS)
 - review\_status.py
      - modified to locate and read JSONL files rather than JSON as
        the \_RESULTS it reviews are JSONL (and have jsonl filename extensions).
 - generate\_mcqs
     - add more robust handling of impudent models refusing to follow instructions
-      and answer in proper JSON format.
+      and answer in proper JSON format. (an extra prompt to try to coax valid json)
 - model\_access
     - implement argo model type (as with alcf, must be at lab or on vpn)
+    - moved all imports to the top, exposing some holes in environment.yml that 
+      would have cropped up with model types not yet tested (HF, for instance).
 - generate\_answers
     - reads JSONL _and_ JSON just to be more resilient
+- A NEW WORKFLOW for "New Knowledge Extraction"
 - generate\_nuggets - new script to create "nuggets" from papers.
     - nugget is the augmented chunk from step 1 in generate\_mcqs, specifically
       formatted in JSON as an ID (DOI ideally) and the augmented chunk (bullet
