@@ -100,10 +100,10 @@ def approximate_total_chunks(input_dir, chunk_size=CHUNK_SIZE):
                         continue
         except Exception as e:
             if config.shutdown_event.is_set():
-                config.logger.info("Shutdown in progress; suppressing error details.")
+                #config.logger.info("Shutdown in progress; suppressing error details.")
                 return 0
             else:
-                config.logger.error(f"Failed to read file {path}: {e}")
+                config.logger.info(f"Failed to read file {path}: {e}")
                 continue
     return total_chunks
 
