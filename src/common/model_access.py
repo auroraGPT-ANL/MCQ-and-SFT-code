@@ -12,6 +12,7 @@ import openai
 from openai import OpenAI
 import logging
 from common.config import timeout, logger, initiate_shutdown, argo_user
+from common.inference_auth_token import get_access_token
 
 from common.exceptions import APITimeoutError
 
@@ -121,7 +122,6 @@ class Model:
             self.model_name = model_name.split('alcf:')[1]
             logger.info(f"ALCF (Sophia) Inference Service Model: {self.model_name}")
 
-            from inference_auth_token import get_access_token
             token = get_access_token()
             from alcf_inference_utilities import get_names_of_alcf_chat_models
             alcf_chat_models = get_names_of_alcf_chat_models(token)
