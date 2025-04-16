@@ -16,6 +16,13 @@ from common.inference_auth_token import get_access_token
 from common.exceptions import APITimeoutError
 from common.alcf_inference_utilities import get_names_of_alcf_chat_models
 
+# these have not yet been tested:
+from huggingface_hub import login
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import GenerationConfig
+from test_model import TestModel
+from requests.exceptions import Timeout
+
 OPENAI_EP  = 'https://api.openai.com/v1'
 # Use the Argo endpoint at the /chat level.
 ARGO_EP    = 'https://apps.inside.anl.gov/argoapi/api/v1/resource/chat'
@@ -87,8 +94,6 @@ class Model:
             """
             self.model_type = 'Huggingface'
             logger.info(f"HF model: {model_name}.")
-            from huggingface_hub import login
-            from transformers import AutoModelForCausalLM, AutoTokenizer
 
             cache_dir = os.getenv("HF_HOME")
 
@@ -190,7 +195,6 @@ class Model:
             self.key = None
 
             # Import the TestModel class here to avoid circular imports
-            from test_model import TestModel
             self.test_model = TestModel(self.model_name)
 
         else:
@@ -258,7 +262,6 @@ class Model:
             temperature = self.temperature  # fallback
 
         if self.model_type == 'Huggingface':
-            from transformers import GenerationConfig
             #logger.info(f"Generating with HF model: {self.model_name}")
             return run_hf_model(user_prompt, self.base_model, self.tokenizer)
 
@@ -312,7 +315,6 @@ class Model:
                 )
                 #logger.info(f"Sending request to {self.model_type} endpoint...")
                 #logger.info(f"Request details: model={self.model_name}, temperature={temperature}")
-                from requests.exceptions import Timeout
                 try:
                     response = client.chat.completions.create(**params)
                     #logger.info("Response received from API")
