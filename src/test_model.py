@@ -2,7 +2,7 @@
 
 import json
 import logging
-from config import logger
+from common.config import logger
 
 logger = logging.getLogger(__name__)
 
