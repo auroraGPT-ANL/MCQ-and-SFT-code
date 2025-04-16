@@ -454,7 +454,7 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
     overall_end_time = time.time()
     total_time = overall_end_time - overall_start_time
     config.logger.info(
-        f"Processed {total_files} files in {human_readable_time(total_time)}.\n "
+        f"Processed {total_files} files in {human_readable_time(total_time)}.\n"
         f"     Chunks processed:: {shared_counters}\n"
         f"     MCQs saved to {output_dir}."
     )
