@@ -48,10 +48,15 @@ conda env create -f environment.yml
 conda activate augpt_env
 ```
 
-4. Add the src directory to your Python path
+4. Add the (full, absolute path) to your src directory to your PYTHONPATH
 ```bash
-export PYTHONPATH=./src
+export PYTHONPATH="$(pwd)/src"
 ```
+Do this every time you activate the conda env, or add this to your '~/.zshrc':
+```bash
+export PYTHONPATH="FULL_PATH_ON_YOUR_HOST/ALCF/MCQ-and-SFT-code/src"
+```
+(Be sure to fill in FULL\_PATH\_ON\_YOUR\_HOST)
 
 5. **Populate \_PAPERS:** Place PDF-formatted input materials (e.g., scientific papers) into \_PAPERS. (Note 
 this workflow is only processing text)
