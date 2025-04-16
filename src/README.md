@@ -6,11 +6,13 @@ the code base uses Python modules.
 
 ## Using Modules
 
-1. Two primary differences are introduced moving when transitioning from stand-alone Python scripts to Python modules:
+Two primary differences are introduced moving when transitioning from stand-alone Python scripts to Python modules:
+
+1. **Running Scripts as Modules**
 
 - Instead of calling a script by its file path, you now run it using the 
   '-m' flag with its module name (without the '.py' extension).
-  - Example:
+- **Example**:
 Instead of:
 ```bash
 python src/mcq_workflow/generate_mcqs.py
@@ -20,10 +22,12 @@ you now run:
 python -m mcq_workflow.generate_mcqs
 ```
 
-2. When importing modules within your package, you now use fully qualified names to indicate
+2. **Absolute Imports**
+
+- When importing modules within your package, you now use fully qualified names to indicate
    their location in the package hierarchy.
 
-- Example:
+- **Example**:
 Instead of writing:
 ```bash
 import config
