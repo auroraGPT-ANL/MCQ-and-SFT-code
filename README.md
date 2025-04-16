@@ -18,41 +18,6 @@ This repository provides Python programs for:
 - [Configuration](#configuration)
 - [Notes](#notes)
 
-## Prerequisites
-
-### ALCF Inference Service Setup
-Before you start, we recommend following the instructions for [ALCF Inference Service Prerequisites](https://github.com/argonne-lcf/inference-endpoints?tab=readme-ov-file#%EF%B8%8F-prerequisites) to set up your ALCF authentication token, which is required to access models via the inference service.
-
-Specifically:
-
-1. Download the script to manage access tokens:
-```bash
-wget https://raw.githubusercontent.com/argonne-lcf/inference-endpoints/refs/heads/main/inference_auth_token.py
-```
-2. Authenticate with your Globus account:
-```bash
-python -m inference_auth_token authenticate
-```
-The above command will generate an access token and a refresh token, and store them in your home directory. 
-
-3. Other Tips
-
-If you need to re-authenticate from scratch in order to 1) change Globus account, or 2) resolve a `Permission denied from internal policies` error, first logout from your account by visiting [https://app.globus.org/logout](https://app.globus.org/logout), and type the following command:
-```bash
-python -m inference_auth_token authenticate --force
-```
-View your access token:
-```bash
-python -m inference_auth_token get_access_token
-```
-If your current access token is expired, the above command will atomatically generate a new token without human intervention.
-
-> **⏰ Token Validity:** All access tokens are valid for 48 hours, but the refresh token will allow you to acquire new access tokens programatically without needing to re-authenticate. Refresh tokens do not expire unless they are left unused for 6 months or more. However, an internal policy will force users to re-authenticate every 7 days.
-> 
-> **🔒 Access Note:**
-> * Endpoints are restricted. You must be on Argonne's network (Use VPN, Dash, or SSH to ANL machine).
-> * You will need to authenticate with Argonne or ALCF SSO (Single Sign On) using your credentials.
-
 
 ### Repository Setup
 
@@ -79,17 +44,20 @@ conda env create -f environment.yml
 conda activate augpt_env
 ```
 
-4. Add the src directory to your Pytho path
+4. Add the src directory to your Python path
 ```bash
 export PYTHONPATH=./src
 ```
 
-5. **Populate \_PAPERS:** Place PDF-formatted input materials (e.g., scientific papers) into \_PAPERS.
+5. **Populate \_PAPERS:** Place PDF-formatted input materials (e.g., scientific papers) into \_PAPERS. (Note 
+this workflow is only processing text)
 
 6. **Set up configuration:** Edit *config.yml* to specify at least two and up to four
 models you wish to use.  (see **Configuration** notes below)
 
-### Workflow Overview
+At minimum you need to specify one, ideally two models. Follow the instructions in **Configuration** below.
+
+### MCQ Workflow Overview
 
 This pipeline converts scientific papers in PDF format into JSON and then uses AI models to:
 * Generate multiple-choice questions (MCQs)
@@ -114,54 +82,55 @@ Note that if you are using the ALCF inference endpoint service you might first c
 models are running, as it takes 10-15 minutes for a model to load.  This will cause any of the 
 codes below (generate\_mcqs.py, generate\_answers.py, score\_answers.py) to time out.
 
-**Check which models are running**
 
-You may wish to check to see which models are currently running as waiting for a model to load can
-take 10-15 minutes (see 
-[ALCF Inference service](https://github.com/argonne-lcf/inference-endpoints)). Get the list of running
-and queued models as follows:
-   ```bash
-   access_token=$(python -m common/inference_auth_token get_access_token)
-   curl -X GET "https://data-portal-dev.cels.anl.gov/resource_server/sophia/jobs" \
-       -H "Authorization: Bearer ${access_token}" | jq
-   ```
-Piping the output to ``jq`` (Command-line JSON processor) makes it much easier to read.
+### Bundled MCQ Workflow Execution
 
-**Notes**
- - If you are not connected via VPN or to Argonne-auth at the lab then you'll get an error such as *curl: (6) Could not resolve host: data-portal-dev.cels.anl.gov*.
- - If it's been a while since you authenticated, you'll get a "Permission denied" error. In this case, you'll need to re-authenticate:
-```
-python -m common/inference_auth_token authenticate --force
-```
-
-If no models are running, then you'll need to invoke one (and wait 10-15 minutes) using 
-one of the codes below (generate\_mcqs.py, generate\_answers.py, score\_answers.py). They will
-time out and you'll need to ^C interrupt them, but this will queue up a model to run. 
-
-
-### Bundled Workflow Execution
-
-For a quick and comprehensive run of the entire workflow:
+For a quick and comprehensive run of the entire
+[MCQ workflow:](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/CeC/MCQ-Workflow.png)
 
 1. Define up to 4 models in `config.yml`
-2. Run the bundled workflow script:
+2. Run the bundled workflow script. 
+
+By default, the workflow script (and each individual python script) displays a progress bar
+for each step.  The input and output directories default to those in 'config.yml' but can 
+be overridden on the command line with -i and/or -o options.
+Similarly, 'config.yml' specifies up to four models to use.  The first one (Model\_A) is
+the default model used for the 'generate\_mcqs' script.  All models (including Model\_A)
+are then used to 'generate\_answers.'  The workflow then has each model 'score\_answers'
+produced by all other models.  
+
+When running individual python scripts, the default models specified in config.yml can be
+overridden on the command line with the -m option.
+
+When the MCQ workflow script is running multiple instances of
+the 'generate\_answers' or 'score\_answers' steps, these are run in parallel on your
+machine.
+
+The -p option allows you to further parallelize the individual scripts ('generate\_mcqs', 
+'generate\_answers', and 'score\_answers'), as these process individual chunks of files.
+This option then creates *p* seperate interactions with the model's inference endpoint.
+Keep in mind that endpoint services have different limits, but most should have no
+trouble with -p up to perhaps ~20.
 
 **Examples:**
 
-Run with default 8-way parallelism
+Run with default 8-way parallelism, in verbose mode to see progress messages
 ```bash
-./src/run_workflow.sh
+./run_mcq_workflow.sh -v
 ```
 
-Run with 12-way parallelism
+Run with 16-way parallelism
 ```bash
-./src/run_workflow.sh -p 12
+./run_mcq_workflow.sh -p 16
 ```
 
 Run with 20 randomly selected MCQs
 ```bash
-./src/run_workflow.sh -n 20
+./run_mcq_workflow.sh -n 20
 ```
+
+Other options:
+ -v --verbose - progress messages (default is a progress bar for each step)
 
 ### Detailed Step-by-Step Workflow
 
@@ -236,6 +205,17 @@ The `config.yml` file allows you to:
 - Specify default directories
 - Define models for each workflow stage
 - Set parallelization options
+- Tweak prompts (carefully)
+
+To run any of these scripts or workflows, you must specify a model using the form *location:model_name*.  
+The *location* portion indicates how to access the model (endpoints, etc.), which is handled in 
+*common/model_access.py*.  This workflow has been tested with locations *local*, *alcf*, and *argo*.
+
+Where credentials are required, place them in a secrets.yml file (which is .gitignored to avoid accidental
+sharing to the world via github).
+
+## General Notes
+All scripts generally use the following options and defaults:
 
 Options include:
 - Model selection
@@ -245,6 +225,70 @@ Options include:
   - `-q / --quiet`: Suppress output
   - Default: Progress bar
 
+## Prerequisites for Using Argonne 
+
+[ALCF Inference Service](https://github.com/argonne-lcf/inference-endpoints/tree/main)
+
+### ALCF Inference Service Setup
+Before you start, we recommend following the instructions for
+[ALCF Inference Service Prerequisites](https://github.com/argonne-lcf/inference-endpoints?tab=readme-ov-file#%EF%B8%8F-prerequisites)
+to set up your ALCF authentication token, which is required to access models via the inference service.
+
+Specifically:
+
+1. Download the script to manage access tokens:
+```bash
+wget https://raw.githubusercontent.com/argonne-lcf/inference-endpoints/refs/heads/main/inference_auth_token.py
+```
+2. Authenticate with your Globus account:
+```bash
+python -m inference_auth_token authenticate
+```
+The above command will generate an access token and a refresh token, and store them in your home directory. 
+
+3. Other Tips
+
+If you need to re-authenticate from scratch in order to 1) change Globus account, or 2) resolve a `Permission denied from internal policies` error, first logout from your account by visiting [https://app.globus.org/logout](https://app.globus.org/logout), and type the following command:
+```bash
+python -m inference_auth_token authenticate --force
+```
+View your access token:
+```bash
+python -m inference_auth_token get_access_token
+```
+If your current access token is expired, the above command will atomatically generate a new token without human intervention.
+
+> **⏰ Token Validity:** All access tokens are valid for 48 hours, but the refresh token will allow you to acquire new access tokens programatically without needing to re-authenticate. Refresh tokens do not expire unless they are left unused for 6 months or more. However, an internal policy will force users to re-authenticate every 7 days.
+> 
+> **🔒 Access Note:**
+> * Endpoints are restricted. You must be on Argonne's network (Use VPN, Dash, or SSH to ANL machine).
+> * You will need to authenticate with Argonne or ALCF SSO (Single Sign On) using your credentials.
+
+
+**Working with ALCF inference Endpoints**
+
+Before running the workflow or scripts you should check to see which models are currently
+running as waiting for a model to load can take 10-15 minutes (see 
+[ALCF Inference service](https://github.com/argonne-lcf/inference-endpoints)).
+
+Get the list of running and queued models as follows:
+   ```bash
+   access_token=$(python -m common/inference_auth_token get_access_token)
+   curl -X GET "https://data-portal-dev.cels.anl.gov/resource_server/sophia/jobs" \
+       -H "Authorization: Bearer ${access_token}" | jq
+   ```
+Piping the output to ``jq`` (Command-line JSON processor) makes it much easier to read.
+
+**Notes**
+ - If you are not connected via VPN or to Argonne-auth at the lab then you'll get an error such as *curl: (6) Could not resolve host: data-portal-dev.cels.anl.gov*.
+ - If it's been a while since you authenticated, you'll get a "Permission denied" error. In this case, you'll need to re-authenticate:
+```
+python -m common/inference_auth_token authenticate --force
+```
+
+If no models are running, then you'll need to invoke one (and wait 10-15 minutes) using 
+one of the codes below (generate\_mcqs.py, generate\_answers.py, score\_answers.py). They will
+time out and you'll need to ^C interrupt them, but this will queue up a model to run. 
 ## Notes
 
 - Authenticate periodically with the ALCF inference service
