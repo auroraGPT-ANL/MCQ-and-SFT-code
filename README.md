@@ -33,6 +33,10 @@ mkdir _PAPERS _JSON _MCQ _RESULTS
 ```
 
 3. **Set Up Conda Environment:**
+
+Important note: this install has been tested on MacOS (15.4) running on Apple M2 silicon. On 
+other platforms the specifics in 'environment.yml' may need to be tweaked.
+
 Option 1: Update your existing Conda environment
 ```bash
 conda env update --name <your_conda_env> --file environment.yml
@@ -114,12 +118,12 @@ trouble with -p up to perhaps ~20.
 
 **Examples:**
 
-Run with default 8-way parallelism, in verbose mode to see progress messages
+Run with default 8-way parallel, in verbose mode to see progress messages
 ```bash
 ./run_mcq_workflow.sh -v
 ```
 
-Run with 16-way parallelism
+Run with 16-way parallel
 ```bash
 ./run_mcq_workflow.sh -p 16
 ```
@@ -137,18 +141,18 @@ Other options:
 #### 1. Convert PDFs to JSON
 Default parsing
 ```bash
-python -m simple_parse
+python -m common.simple_parse
 ```
 
 or explicitly specify input and output directories
 ```bash
-python -m simple_parse -i _PAPERS -o _JSON
+python -m common.simple_parse -i _PAPERS -o _JSON
 ```
 
 #### 2. Generate MCQs
-Authenticate with ALCF inference service
+If using the ALCF inference endpoints, authenticate with:
 ```bash
-python -m inference_auth_token authenticate
+python -m common.inference_auth_token authenticate
 ```
 
 Generate MCQs (using default or specified model)
@@ -157,7 +161,7 @@ python -m generate_mcqs
 ```
 or to specify a different model than in *config.yml*:
 ```bash
-python -m generate_mcqs -m 'alcf:mistralai/Mistral-7B-Instruct-v0.3'
+python -m mcq_workflow.generate_mcqs -m 'alcf:mistralai/Mistral-7B-Instruct-v0.3'
 ```
 (noting that models are specified as *location*:*model_name* - see **Additional Notes** below)
 
