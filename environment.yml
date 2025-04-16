@@ -18,6 +18,7 @@ dependencies:
  - xz=5.4.6
  - zlib=1.2.13
  - jq
+ - pytorch torchvision torchaudio cpuonly -c pytorch #needed for HF models
  - pip:
    - huggingface_hub
    - transformers
