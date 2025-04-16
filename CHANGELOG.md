@@ -1,12 +1,12 @@
 # Changelog
 
 ### v2.0 - xxYYYr2025
-- major reorg of src directory as follows:
-     - src/common: common code such as config, model helpers, utils 
-     - src/mcq\_workflow: mcq generation, answer, scoring, etc. workflow (original workflow) 
-     - src/nke\_workflow: **N**ew **K**nowledge (nugget) **E**xtraction workflow 
-     - src/tune\_workflow: moved tuning scripts into src/tuning (these have not yet been tested)
-- Implemented a Python modules approach. Users will typically run all scripts
+- major reorg of src directory as follows. Each of these src/ subdirectories is a Python *module*:
+     - src/**common**: common code such as config, model helpers, utils 
+     - src/**mcq\_workflow**: mcq generation, answer, scoring, etc. workflow (original workflow) 
+     - src/**nke\_workflow**: **N**ew **K**nowledge (nugget) **E**xtraction workflow 
+     - src/**tune\_workflow**: moved tuning scripts into src/tuning (these have not yet been tested)
+- Implemented a Python modules. Users will typically run all scripts
   from the repo root directory, invoking the scripts with "python -m modulename.scriptname"
   for the script at "src/modulename/scriptname.py"
      - internal changes such as changing from "import config" to "import common.config"
