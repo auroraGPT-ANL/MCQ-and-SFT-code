@@ -183,8 +183,7 @@ def main():
                 out_f.write(json.dumps(item, ensure_ascii=False) + "\n")
             out_f.flush()
     pbar.close()
-    config.logger.info(f"Output written to {output_path}")
-    config.logger.info("Processing complete")
+    config.logger.info(f"Answers written to {output_path}")
 
 if __name__ == "__main__":
     main()

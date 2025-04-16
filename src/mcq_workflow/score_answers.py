@@ -163,7 +163,7 @@ def main():
         data = [json.loads(line) for line in f if line.strip()]
 
     total_items = len(data)
-    config.logger.info(f"Generating answers for {total_items} items using model {modelB_name}")
+    config.logger.info(f"Generating answers for {total_items} MCQs using {modelB_name}")
     if use_progress_bar:
         pbar = tqdm(total=total_items, desc="Processing", unit="item")
     else:
@@ -174,8 +174,6 @@ def main():
     scores_list = []
     eval_total_time = 0.0
     processed_count = 0
-
-    config.logger.info(f"Processing {total_items} QA pairs")
 
     if os.path.exists(score_file):
         os.remove(score_file)

@@ -1,5 +1,40 @@
 # Changelog
 
+### v2.0 - xxYYYr2025
+- major reorg of src directory as follows:
+     - moved common code such as config, model helpers, utils to common/
+     - moved mcq generation, answer, scoring, etc. workflow (original workflow) to mcq\_workflow/
+     - moved new knowledge (nugget) extraction workflow - new - to nugget\_workflow/
+     - moved tuning scripts into src/tuning
+- Implemented a modules approach with the understading that users would run all scripts
+  from the repo root directory, invoking the scripts with "python -m modulename.scriptname"
+  for the script at "src/modulename/scriptname.py"
+     - internal changes such as changing from "import config" to "import common.config"
+     - various other details re paths, etc.
+- review\_status.py
+     - modified to locate and read JSONL files rather than JSON as
+       the \_RESULTS it reviews are JSONL (and have jsonl filename extensions).
+- generate\_mcqs
+    - add more robust handling of impudent models refusing to follow instructions
+      and answer in proper JSON format.
+- model\_access
+    - implement argo model type (as with alcf, must be at lab or on vpn)
+- generate\_answers
+    - reads JSONL _and_ JSON just to be more resilient
+- generate\_nuggets - new script to create "nuggets" from papers.
+    - nugget is the augmented chunk from step 1 in generate\_mcqs, specifically
+      formatted in JSON as an ID (DOI ideally) and the augmented chunk (bullet
+      point summary and 80-100 word comment).
+    - extracts metadata (title, author, ArXiv info if available) from first chunk
+    - uses ArXiv ID, DOI, or if not present, looks up DOI to use as a tag to each nugget
+    - if cannot find DOI, uses titlewithoutbreaks-firstauthorlastname as the ID
+    - uses abstract as the first nugget
+    - deduplicate as needed
+- config.yml
+    - added prompts subsection for generate\_nuggets
+- config.py
+    - added code to extract generate\_nuggets prompts
+
 ### v1.5 - 09Apr2025 (CeC)
 - generate\_mcqs
     - write all MCQs out after finishing each file, not by chunk
