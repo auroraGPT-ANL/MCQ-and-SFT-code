@@ -4,8 +4,8 @@
 - major reorg of src directory as follows:
      - src/common: common code such as config, model helpers, utils 
      - src/mcq\_workflow: mcq generation, answer, scoring, etc. workflow (original workflow) 
-     - src/nke\_workflow: **N**ew **K**nowledge (nugget) **E**xtraction workflow - new - to nugget\_workflow/
-     - moved tuning scripts into src/tuning
+     - src/nke\_workflow: **N**ew **K**nowledge (nugget) **E**xtraction workflow 
+     - src/tune\_workflow: moved tuning scripts into src/tuning (these have not yet been tested)
 - Implemented a Python modules approach. Users will typically run all scripts
   from the repo root directory, invoking the scripts with "python -m modulename.scriptname"
   for the script at "src/modulename/scriptname.py"
@@ -13,6 +13,11 @@
      - various other details re paths, etc.
 - Shell script run\_mcq\_workflow is in the root directory, where the user data directories
   also live (_PAPERS, _JSON, _MCQ, _RESULTS)
+
+- README.md
+     - Overhauled to be less centered around alcf model types (moving the associated info
+       down the page).
+     - Updated and tested all steps
 - review\_status.py
      - modified to locate and read JSONL files rather than JSON as
        the \_RESULTS it reviews are JSONL (and have jsonl filename extensions).
@@ -23,10 +28,18 @@
     - implement argo model type (as with alcf, must be at lab or on vpn)
     - moved all imports to the top, exposing some holes in environment.yml that 
       would have cropped up with model types not yet tested (HF, for instance).
+- environment.yml
+    - added missing dependencies: *transformers*, *huggingface_hub*, *pytorch*,
+      *torchvision*, and *torchaudio*. (see model\_access.py note)
 - generate\_answers
     - reads JSONL _and_ JSON just to be more resilient
-- A NEW WORKFLOW for "New Knowledge Extraction"
-- generate\_nuggets - new script to create "nuggets" from papers.
+- config.yml
+    - added prompts subsection for generate\_nuggets
+- config.py
+    - added code to extract generate\_nuggets prompts
+
+- NEW WORKFLOW for "New Knowledge Extraction"
+- generate\_nuggets - new (under construction)script to create "nuggets" from papers.
     - nugget is the augmented chunk from step 1 in generate\_mcqs, specifically
       formatted in JSON as an ID (DOI ideally) and the augmented chunk (bullet
       point summary and 80-100 word comment).
@@ -35,10 +48,6 @@
     - if cannot find DOI, uses titlewithoutbreaks-firstauthorlastname as the ID
     - uses abstract as the first nugget
     - deduplicate as needed
-- config.yml
-    - added prompts subsection for generate\_nuggets
-- config.py
-    - added code to extract generate\_nuggets prompts
 
 ### v1.5 - 09Apr2025 (CeC)
 - generate\_mcqs
