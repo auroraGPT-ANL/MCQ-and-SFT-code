@@ -4,7 +4,7 @@
 - major reorg of src directory as follows:
      - src/common: common code such as config, model helpers, utils 
      - src/mcq\_workflow: mcq generation, answer, scoring, etc. workflow (original workflow) 
-     - src/nke\_workflow: *n*ew knowledge (nugget) extraction workflow - new - to nugget\_workflow/
+     - src/nke\_workflow: **N**ew **K**nowledge (nugget) **E**xtraction workflow - new - to nugget\_workflow/
      - moved tuning scripts into src/tuning
 - Implemented a Python modules approach. Users will typically run all scripts
   from the repo root directory, invoking the scripts with "python -m modulename.scriptname"
