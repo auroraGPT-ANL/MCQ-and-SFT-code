@@ -5,8 +5,8 @@ import json
 import logging
 import os
 import argparse
-from model_access import Model
-from config import logger
+from common.model_access import Model
+from common.config import logger
 
 class TestResults:
     def __init__(self, verbose=False):
