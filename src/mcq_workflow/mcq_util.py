@@ -62,6 +62,19 @@ def load_file_lines(filepath: str) -> list:
         else:
             return file.readlines()
 
+def estimate_chunk_count(input_dir: str, files: list[str], bytes_per_chunk: int = 1000) -> int:
+    """
+    Cheaper heuristic: assume ~1 chunk per `bytes_per_chunk` bytes of file size.
+    """
+    total = 0
+    for f in files:
+        try:
+            size = os.path.getsize(os.path.join(input_dir, f))
+            total += max(1, size // bytes_per_chunk)
+        except OSError:
+            continue
+    return total
+
 
 def split_text_into_chunks(text: str, chunk_size: int = CHUNK_SIZE) -> list:
     """
@@ -332,13 +345,15 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
 
     overall_start_time = time.time()
 
-    # Compute approximate chunk count.
+    # Compute approximate chunk count using size heuristic
     if json_files:
-        if not config.shutdown_event.is_set():
-            approximate_chunk_count = sum(count_chunks_in_file(os.path.join(input_dir, f), CHUNK_SIZE) for f in all_files)
-            config.logger.info(f"{total_files} JSON files, ~ {approximate_chunk_count} chunks\n")
+        approximate_chunk_count = estimate_chunk_count(input_dir, all_files)
+        config.logger.info(f"{total_files} JSON files, ~{approximate_chunk_count} chunks\n")
     else:
-        approximate_chunk_count = sum(1 for _ in open(os.path.join(input_dir, jsonl_files[0]), 'r', encoding='utf-8'))
+        # fallback for .jsonl
+        approximate_chunk_count = sum(
+            1 for _ in open(os.path.join(input_dir, jsonl_files[0]), 'r', encoding='utf-8')
+        )
 
     counter_lock = threading.Lock()
     shared_counters = {"success": 0, "failure": 0}
