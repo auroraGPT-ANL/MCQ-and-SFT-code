@@ -318,6 +318,8 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
     those files are skipped.
     Writes MCQs to output_dir in JSONL format.
     """
+    config.logger.info(f"Run with {parallel_workers} threads.")
+
     # Gather list of files.
     json_files  = [f for f in os.listdir(input_dir) if f.lower().endswith(".json")]
     jsonl_files = [f for f in os.listdir(input_dir) if f.lower().endswith(".jsonl")]
@@ -375,7 +377,7 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
 
             for linenum, line in enumerate(lines, start=1):
                 if config.shutdown_event.is_set():
-                    config.logger.info("Shutdown in progress: stopping new tasks (file loop).")
+                    #config.logger.info("Shutdown in progress: stopping new tasks (file loop).")
                     break
                 try:
                     record = json.loads(line.strip())
@@ -453,9 +455,12 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
     file_results.clear()
     overall_end_time = time.time()
     total_time = overall_end_time - overall_start_time
-    config.logger.info(
-        f"Processed {total_files} files in {human_readable_time(total_time)}.\n"
-        f"      Chunks processed:: {shared_counters}\n"
-        f"      MCQs saved to {output_dir}."
-    )
+    if config.shutdown_event.is_set():
+        config.logger.info("Process terminated")
+    else:
+        config.logger.info(
+            f"Processed {total_files} files in {human_readable_time(total_time)}.\n"
+            f"      Chunks processed:: {shared_counters}\n"
+            f"      MCQs saved to {output_dir}."
+        )
 
