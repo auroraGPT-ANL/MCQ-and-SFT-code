@@ -62,6 +62,9 @@ def load_file_lines(filepath: str) -> list:
         else:
             return file.readlines()
 
+# quicker estimate of chunk count up front - saves 10-20s of startup and associated
+# user head-scratching before pbar is displayed
+
 def estimate_chunk_count(input_dir: str, files: list[str], bytes_per_chunk: int = 1000) -> int:
     """
     Cheaper heuristic: assume ~1 chunk per `bytes_per_chunk` bytes of file size.
@@ -445,7 +448,6 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
     for fname, qa_pairs in file_results.items():
         base = os.path.splitext(fname)[0]
         out_file = os.path.join(output_dir, f'processed_{base}.jsonl')
-        config.logger.info(f"Writing {len(qa_pairs)} MCQs to {out_file}")
         try:
             if force:
                 with config.output_file_lock:
