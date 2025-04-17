@@ -44,7 +44,7 @@ shutdown_event = threading.Event()
 def _handle_sigint(signum, frame):  # noqa: D401, unused‑arg
     """Set the shutdown flag so worker threads can exit cleanly."""
     shutdown_event.set()
-    logger.warning("Interrupt received – shutting down after workers finish …")
+    logger.warning("Interrupt received – shutting down after workers finish (could take 60-90s)")
 
 
 def initiate_shutdown(message: str = "Shutting down.") -> None:
