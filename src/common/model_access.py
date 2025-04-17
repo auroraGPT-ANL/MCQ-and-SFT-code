@@ -1,206 +1,209 @@
 #!/usr/bin/env python
 
-import sys
+"""common.model_access
+   A flexible wrapper that can talk to multiple back‑ends (OpenAI, Argo, ALCF,
+   local vLLM, Hugging‑Face, etc.).  Refactored to import the whole *config*
+   module so new secrets / parameters can be accessed without editing this file.
+"""
+
+from __future__ import annotations
+
 import json
 import os
-import subprocess
 import re
-import time
 import socket
+import subprocess
+import sys
+import time
+from typing import Any
+
 import requests
-import openai
+from huggingface_hub import login
 from openai import OpenAI
-import logging
-from common.config import timeout, logger, initiate_shutdown, argo_user
+from requests.exceptions import Timeout
+from transformers import (AutoModelForCausalLM, AutoTokenizer,
+                          GenerationConfig)
+
+from common import config
 from common.inference_auth_token import get_access_token
 from common.exceptions import APITimeoutError
 from common.alcf_inference_utilities import get_names_of_alcf_chat_models
+from test_model import TestModel  # local stub for offline testing
 
-# these have not yet been tested:
-from huggingface_hub import login
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers import GenerationConfig
-from test_model import TestModel
-from requests.exceptions import Timeout
+# ---------------------------------------------------------------------------
+# Local aliases for readability 
+# ---------------------------------------------------------------------------
+logger = config.logger
+timeout = config.timeout
+initiate_shutdown = config.initiate_shutdown
+argo_user = config.argo_user
 
-OPENAI_EP  = 'https://api.openai.com/v1'
-# Use the Argo endpoint at the /chat level.
-ARGO_EP    = 'https://apps.inside.anl.gov/argoapi/api/v1/resource/chat'
+# ---------------------------------------------------------------------------
+# Constants 
+# ---------------------------------------------------------------------------
+OPENAI_EP = "https://api.openai.com/v1"
+ARGO_EP = "https://apps.inside.anl.gov/argoapi/api/v1/resource/chat"
+
 
 class Model:
+    """Unified interface for multiple chat/completions back‑ends."""
+
     def __init__(self, model_name: str):
-        """
-        Initialize a generic Model object that can handle multiple backends.
+        self.model_name = model_name  # may be rewritten below
+        self.base_model: Any | None = None
+        self.tokenizer: Any | None = None
+        self.temperature = 0.7
 
-        You used to do:
-            self.base_model  = config.defaultBaseModel
-            self.tokenizer   = config.defaultTokenizer
-            self.temperature = config.defaultTemperature
-        but now we've removed references to config.default*.
+        self.headers = {"Content-Type": "application/json"}
+        self.endpoint: str | None = None
+        self.model_type: str | None = None
+        self.key: str | None = None
+        self.client_socket: socket.socket | None = None
+        self.status = "UNKNOWN"
+        self.argo_user: str | None = None
 
-        Instead, we choose a fallback default for each. If you want different
-        defaults for different model_name cases, you can add if/else logic here.
-        """
-        self.model_name   = model_name
-        self.base_model   = None        # Will be set if we load HF or something else
-        self.tokenizer    = None
-        self.temperature  = 0.7         # A fallback default but overridden by config.yml
+        # Branch on prefix -----------------------------------------------------
+        if model_name.startswith("local:"):
+            # ------------------------------------------------------------------
+            # Local vLLM server 
+            # ------------------------------------------------------------------
+            self.model_name = model_name.split("local:")[1]
+            self.model_type = "vLLM"
+            self.endpoint = "http://localhost:8000/v1/chat/completions"
+            logger.info(f"Local vLLM model: {self.model_name}")
 
-        self.headers      = {'Content-Type': 'application/json'}
-        self.endpoint     = None
-        self.model_type   = None
-        self.key          = None
-        self.client_socket = None
-        self.status       = "UNKNOWN"
-        self.argo_user    = None        # filled in as needed for Argo model types
+        elif model_name.startswith("pb:"):
+            # ------------------------------------------------------------------
+            # PBS‑launched Hugging‑Face model on HPC 
+            # ------------------------------------------------------------------
+            self._init_pbs_model(model_name)
 
-        if model_name.startswith('local:'):
-            self.model_name = model_name.split('local:')[1]
-            logger.info(f"Local model: {model_name}.")
-            self.model_type = 'vLLM'
-            self.endpoint   = 'http://localhost:8000/v1/chat/completions'
+        elif model_name.startswith("hf:"):
+            # ------------------------------------------------------------------
+            # Local Hugging Face model 
+            # ------------------------------------------------------------------
+            self._init_hf_model(model_name)
 
-        elif model_name.startswith('pb:'):
-            """
-            Submit the model job to PBS and store the job ID, then connect
-            over sockets. This is specialized code for HPC job submission.
-            """
-            self.model_name   = model_name.split('pb:')[1]
-            logger.info(f"PB model: {model_name}.")
-            self.model_type   = 'HuggingfacePBS'
-            self.model_script = "run_model.pbs"
-            self.job_id       = None
-            self.status       = "PENDING"
+        elif model_name.startswith("alcf:"):
+            self._init_alcf_model(model_name)
 
-            logger.info(f'Huggingface model {self.model_name} to be run on HPC system: Starting model server.')
-            result = subprocess.run(["qsub", self.model_script], capture_output=True, text=True, check=True)
-            self.job_id = result.stdout.strip().split(".")[0]  # Extract job ID
-            logger.info(f"Job submitted with ID: {self.job_id}")
+        elif model_name.startswith("cafe:"):
+            self._init_cafe_model(model_name)
 
-            # Wait until job starts running
-            self.wait_for_job_to_start()
-            self.connect_to_model_server()
-            # Send model name to server
-            self.client_socket.sendall(self.model_name.encode())
-            response = self.client_socket.recv(1024).decode()
-            if response != 'ok':
-                logger.warning(f"Unexpected response: {response}")
-                initiate_shutdown("Initiating shutdown.")
-            logger.info("Model server initialized")
+        elif model_name.startswith("openai:"):
+            self._init_openai_model(model_name)
 
-        elif model_name.startswith('hf:'):
-            """
-            'Huggingface' local model approach, reading from huggingface_hub.
-            """
-            self.model_type = 'Huggingface'
-            logger.info(f"HF model: {model_name}.")
+        elif model_name.startswith("argo:"):
+            self._init_argo_model(model_name)
 
-            cache_dir = os.getenv("HF_HOME")
-
-            self.model_name = model_name.split('hf:')[1]
-            logger.info(f"HF model running locally: {model_name}")
-            self.endpoint = 'http://huggingface.co'
-
-            with open("hf_access_token.txt", "r") as file:
-                self.key = file.read().strip()
-            login(self.key)
-
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.model_name,
-                cache_dir=cache_dir
-            )
-            self.base_model = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
-                device_map="auto",
-                cache_dir=cache_dir
-            )
-            # Ensure pad/eos tokens
-            if self.tokenizer.pad_token is None:
-                self.tokenizer.pad_token = self.tokenizer.eos_token
-            self.base_model.config.pad_token_id = self.tokenizer.pad_token_id
-            self.tokenizer.padding_side = "right"
-
-        elif model_name.startswith('alcf'):
-            """
-            Use the ALCF Inference Service endpoint
-            """
-            self.model_name = model_name.split('alcf:')[1]
-            logger.info(f"ALCF (Sophia) Inference Service Model: {self.model_name}")
-
-            token = get_access_token()
-            alcf_chat_models = get_names_of_alcf_chat_models(token)
-            if self.model_name not in alcf_chat_models:
-                logger.warning(f"Bad ALCF model: {self.model_name}")
-                initiate_shutdown("Initiating shutdown.")
-            self.model_type = 'ALCF'
-            self.endpoint   = 'https://data-portal-dev.cels.anl.gov/resource_server/sophia/vllm/v1'
-            self.key        = token
-
-        elif model_name.startswith('cafe'):
-            """
-            Use Rick's Cafe Inference Service endpoint
-            """
-            self.model_name = model_name.split('cafe:')[1]
-            logger.info(f"Rick's Cafe model: {self.model_name}")
-
-            # For now, simply set the token to a placeholder
-            token = "CELS"
-            self.model_type = 'CAFE'
-            self.endpoint   = 'https://195.88.24.64/v1'
-            self.key        = token
-
-        elif model_name.startswith('openai'):
-            """
-            Use OpenAI's API (e.g. GPT-3.5/4)
-            """
-            self.model_name = model_name.split('openai:')[1]
-            logger.info(f"OpenAI model (run at OpenAI): {self.model_name}")
-            self.model_type = 'OpenAI'
-            with open('openai_access_token.txt', 'r') as file:
-                self.key = file.read().strip()
-            self.endpoint = OPENAI_EP
-
-        elif model_name.startswith('argo:'):
-            """
-            Use Argonne's Argo API service (OpenAI-compatible API)
-            """
-
-            self.model_name = model_name.split('argo:')[1]
-            logger.info(f"Argo API model: {self.model_name}")
-            self.model_type = 'Argo'
-
-            # Get Argonne username from config (which loads from secrets.yml)
-            self.argo_user = argo_user
-            if not self.argo_user:
-                logger.warning("Argo username not found in config/secrets")
-                initiate_shutdown("Argo API requires authentication.")
-
-            #logger.info(f"Using Argo user: {self.argo_user}")
-            self.endpoint = ARGO_EP
-            #logger.info(f"Argo endpoint: {ARGO_EP}")
-            # Add dummy API key for OpenAI client compatibility
-            self.key = "sk-dummy-key-for-argo-models"
-
-        elif model_name.startswith('test:'):
-            """
-            Test model type - returns predefined responses for offline testing
-            Optional format: test:mcq, test:answer, test:score
-            Default is test:all (responds to all types)
-            """
-            self.model_name = model_name.split('test:')[1] if ':' in model_name else "all"
-            logger.info(f"Test model (stub): {self.model_name}")
-            self.model_type = 'Test'
-            self.endpoint = None  # No endpoint needed
-            self.temperature = 0.0  # Deterministic responses
-            self.key = None
-
-            # Import the TestModel class here to avoid circular imports
-            self.test_model = TestModel(self.model_name)
+        elif model_name.startswith("test:"):
+            self._init_test_model(model_name)
 
         else:
-            logger.warning(f"Bad model: {model_name}")
-            initiate_shutdown("Initiating shutdown.")
+            logger.error(f"Unrecognised model specifier: {model_name}")
+            initiate_shutdown("Model initialisation failed.")
 
+    # -----------------------------------------------------------------------
+    #  Initialiser helpers 
+    # -----------------------------------------------------------------------
+    
+    # "pb:<model>" - PBS submission
+    def _init_pbs_model(self, model_name: str):
+        self.model_name = model_name.split("pb:")[1]
+        self.model_type = "HuggingfacePBS"
+        self.model_script = "run_model.pbs"
+        self.status = "PENDING"
+        logger.info(f"Submitting Hugging‑Face PBS job for {self.model_name}")
+
+        # Submit and capture job‑ID
+        result = subprocess.run(["qsub", self.model_script], capture_output=True, text=True, check=True)
+        self.job_id = result.stdout.strip().split(".")[0]
+        self.wait_for_job_to_start()
+        self.connect_to_model_server()
+        self.client_socket.sendall(self.model_name.encode())
+        if self.client_socket.recv(1024).decode() != "ok":
+            initiate_shutdown("Model server init handshake failed.")
+        logger.info("Model server initialised.")
+
+    # "hf:<model>" - HF
+    def _init_hf_model(self, model_name: str):
+        self.model_type = "Huggingface"
+        self.model_name = model_name.split("hf:")[1]
+        logger.info(f"Loading local HF model: {self.model_name}")
+
+        cache_dir = os.getenv("HF_HOME")
+        # Prefer secret token; fall back to file for legacy setups
+        self.key = config.get_secret("huggingface.token")
+        if not self.key:
+            try:
+                with open("hf_access_token.txt", "r", encoding="utf-8") as fh:
+                    self.key = fh.read().strip()
+            except FileNotFoundError:
+                initiate_shutdown("Missing Hugging Face access token.")
+
+        login(self.key)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, cache_dir=cache_dir)
+        self.base_model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto", cache_dir=cache_dir)
+        # Ensure pad/eos tokens
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.base_model.config.pad_token_id = self.tokenizer.pad_token_id
+        self.tokenizer.padding_side = "right"
+        self.endpoint = "http://huggingface.co"
+
+    # "alcf:<model>" - ALCF 
+    def _init_alcf_model(self, model_name: str):
+        token = get_access_token()
+        self.model_name = model_name.split("alcf:")[1]
+        if self.model_name not in get_names_of_alcf_chat_models(token):
+            initiate_shutdown(f"ALCF model {self.model_name} not in registry.")
+        self.model_type = "ALCF"
+        self.endpoint = "https://data-portal-dev.cels.anl.gov/resource_server/sophia/vllm/v1"
+        self.key = token
+        logger.info(f"ALCF model selected: {self.model_name}")
+
+    # "cafe:<model>" - Rick's secret server
+    def _init_cafe_model(self, model_name: str):
+        self.model_name = model_name.split("cafe:")[1]
+        self.model_type = "CAFE"
+        self.endpoint = "https://195.88.24.64/v1"
+        self.key = "CELS"  # placeholder
+        logger.info(f"Cafe model: {self.model_name}")
+
+    # "openai:<model>" - OpenAI
+    def _init_openai_model(self, model_name: str):
+        self.model_name = model_name.split("openai:")[1]
+        self.model_type = "OpenAI"
+        self.endpoint = OPENAI_EP
+        try:
+            with open("openai_access_token.txt", "r", encoding="utf-8") as fh:
+                self.key = fh.read().strip()
+        except FileNotFoundError:
+            initiate_shutdown("Missing OpenAI access token.")
+        logger.info(f"OpenAI model: {self.model_name}")
+
+    # "argo:<model>" - Argonne ARGO
+    def _init_argo_model(self, model_name: str):
+        self.model_name = model_name.split("argo:")[1]
+        self.model_type = "Argo"
+        self.endpoint = ARGO_EP
+        self.argo_user = argo_user or config.get_secret("argo.username")
+        if not self.argo_user:
+            initiate_shutdown("Argo username not found in secrets.yml.")
+        self.key = "sk‑dummy‑key"  # placeholder for OpenAI‑compatible header
+        logger.info(f"Argo model: {self.model_name} (user = {self.argo_user})")
+
+    # "test:<model>" - Local stub model for offline testing
+    def _init_test_model(self, model_name: str):
+        self.model_name = model_name.split("test:")[1] if ":" in model_name else "all"
+        self.model_type = "Test"
+        self.temperature = 0.0
+        self.test_model = TestModel(self.model_name)
+        logger.info(f"Loaded TestModel stub ({self.model_name})")
+
+    # -----------------------------------------------------------------------
+    #  PBS helper methods 
+    # -----------------------------------------------------------------------
     def wait_for_job_to_start(self):
         """Monitor job status and get assigned compute node"""
         while True:
@@ -230,6 +233,9 @@ class Model:
                 time.sleep(5)
                 logger.warning(f"Trying connection again {count}")
 
+    # -----------------------------------------------------------------------
+    #  General methods 
+    # -----------------------------------------------------------------------
     def details(self):
         """
         Print basic info about the model to the logs.
@@ -411,6 +417,10 @@ class Model:
             logger.warning(f"Unknown model type: {self.model_type}")
             initiate_shutdown("Initiating shutdown.")
 
+    # -----------------------------------------------------------------------
+    #  HuggingFace
+    # -----------------------------------------------------------------------
+
 def run_hf_model(input_text, base_model, tokenizer):
     """
     Generate text from a local HF model.
@@ -431,4 +441,3 @@ def run_hf_model(input_text, base_model, tokenizer):
     )
     generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
     return generated_text
-
