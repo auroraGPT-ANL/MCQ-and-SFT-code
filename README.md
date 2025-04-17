@@ -125,7 +125,7 @@ trouble with -p up to perhaps ~20.
 
 Run with default 8-way parallel, in verbose mode to see progress messages
 ```bash
-./run_mcq_workflow.sh -v
+./scripts/run_mcq_workflow.sh -v
 ```
 
 Run with 16-way parallel
