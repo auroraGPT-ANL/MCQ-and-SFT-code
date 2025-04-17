@@ -334,8 +334,9 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
 
     # Compute approximate chunk count.
     if json_files:
-        approximate_chunk_count = sum(count_chunks_in_file(os.path.join(input_dir, f), CHUNK_SIZE) for f in all_files)
-        config.logger.info(f"{total_files} JSON files, ~ {approximate_chunk_count} chunks\n")
+        if not config.shutdown_event.is_set():
+            approximate_chunk_count = sum(count_chunks_in_file(os.path.join(input_dir, f), CHUNK_SIZE) for f in all_files)
+            config.logger.info(f"{total_files} JSON files, ~ {approximate_chunk_count} chunks\n")
     else:
         approximate_chunk_count = sum(1 for _ in open(os.path.join(input_dir, jsonl_files[0]), 'r', encoding='utf-8'))
 
@@ -456,7 +457,7 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
     overall_end_time = time.time()
     total_time = overall_end_time - overall_start_time
     if config.shutdown_event.is_set():
-        config.logger.info("Process terminated")
+        config.logger.warning("Process terminated")
     else:
         config.logger.info(
             f"Processed {total_files} files in {human_readable_time(total_time)}.\n"
