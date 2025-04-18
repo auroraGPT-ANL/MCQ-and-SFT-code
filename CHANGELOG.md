@@ -18,7 +18,7 @@ live in their own branches at the same layer (peers with agent, src, and legacy)
 
 ```
 MCQ-and-SFT-code/
-├─ src/                 # single source of truth   ← keep everything you already refactored
+├─ src/                 # refactored to function in either an agent framework or legacy CLI/shell_script
 │    ├─ common/
 │    ├─ mcq\_workflow/
 │    ├─ nugget\_workflow/
