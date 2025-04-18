@@ -23,6 +23,7 @@ timeout:    45            # model query timeout
   #name:        "alcf:argonne-private/AuroraGPT-Tulu3-SFT-0125"
   #name:        "alcf:argonne-private/AuroraGPT-IT-v4-0125"
   #name:        "alcf:argonne-private/AuroraGPT-7B"
+  #name:        "alcf:meta-llama/Meta-Llama-3-70B-Instruct"
   #name:        "pb:mistralai/Mistral-7B-Instruct-v0.3"
   #name:        "openai:gpt-4"
   #name:        "pb:argonne-private/Llama2-70B"
@@ -33,8 +34,8 @@ timeout:    45            # model query timeout
 # this model is the default for Model-A for score_answers.py
 #
 model:
-  #name:        "alcf:meta-llama/Meta-Llama-3-70B-Instruct"
-  name:         "argo:gpt4"
+  name:         "test:test"
+  #name:         "argo:gpt4"
   temperature:  0.7
   baseModel:   "None"
   Tokenizer:   "None"

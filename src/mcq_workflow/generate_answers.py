@@ -1,18 +1,22 @@
 #!/usr/bin/env python
+"""
+generate_answers.py
 
-# parallel_generate_answers.py
-
+Provides both a Python API and CLI for generating answers to MCQs in parallel.
+"""
+import os
 import sys
 import json
-import os
 import time
 import argparse
 import logging
 import concurrent.futures
+from typing import Union, List
 from tqdm import tqdm
 
 from common import config
 from common.model_access import Model
+
 
 def process_qa_item(qa_item, index, model):
     """
@@ -40,7 +44,7 @@ def process_qa_item(qa_item, index, model):
         return (index, None)
     gen_time = time.time() - start_time
 
-    new_tuple = {
+    result = {
         'file': filename,
         'filenum': filenum,
         'chunknum': chunknum,
@@ -49,142 +53,173 @@ def process_qa_item(qa_item, index, model):
         'reference': reference_answer,
         'model': model_answer
     }
-    return (index, new_tuple)
+    return (index, result)
 
-def main():
-    parser = argparse.ArgumentParser(
-        description='Use LLM to provide answers to MCQs in parallel, saving periodically.'
-    )
-    parser.add_argument('-m','--model', help='Model to use', default=config.defaultModel)
-    parser.add_argument('-s','--start', help='Start index in MCQs file (default: 0)', default='0')
-    parser.add_argument('-e','--end', help='End index in MCQs file (or "all")', default='all')
-    parser.add_argument('-c', "--cache-dir", type=str,
-                        default=os.getenv("HF_HOME"),
-                        help="Custom cache directory for Hugging Face")
-    parser.add_argument('-i', '--input', help='File containing MCQs (default: first JSONL file in config.mcq_dir)', default=None)
-    parser.add_argument('-o', '--output', help='Output directory for results (default: config.results_dir)', default=None)
-    parser.add_argument('-p', '--parallel', type=int,
-                        default=config.defaultThreads,
-                        help=f'Number of parallel threads (default: {config.defaultThreads})')
-    parser.add_argument('-q','--quiet',   action='store_true', help='No progress bar or messages')
-    parser.add_argument('-v','--verbose', action='store_true', help='Enable verbose logging')
-    args = parser.parse_args()
 
-    use_progress_bar = config.configure_verbosity(args)
+def generate_answers_file(
+    input_file: str,
+    model_name: str = config.defaultModel,
+    output_dir: str = None,
+    start_index: int = 0,
+    end_index: Union[int, str] = 'all',
+    parallel: int = None,
+    cache_dir: str = None,
+    quiet: bool = False,
+    verbose: bool = False
+) -> str:
+    """
+    Generate model answers for MCQs stored in a JSON or JSONL file.
 
-    # Set Hugging Face cache directory if provided.
-    if args.cache_dir:
-        os.environ["HF_HOME"] = args.cache_dir
-        config.logger.info(f"Using Hugging Face cache directory: {args.cache_dir}")
+    Returns:
+      The path to the output JSONL file.
+    """
+    
+    if input_file is None:
+        # pick the first *.jsonl in config.mcq_dir
+        jsonl_files = [f for f in os.listdir(config.mcq_dir) if f.endswith(".jsonl")]
+        if not jsonl_files:
+            raise FileNotFoundError(f"No JSONL files found in {config.mcq_dir}")
+        input_file = os.path.join(config.mcq_dir, jsonl_files[0])
+        config.logger.info(f"Using default MCQ file: {input_file}")
 
-    # Resolve input file.
-    if args.input is None:
-        mcq_files = [f for f in os.listdir(config.mcq_dir) if f.endswith('.jsonl')]
-        if not mcq_files:
-            config.logger.error(f"No JSONL files found in {config.mcq_dir}")
-            config.initiate_shutdown("Initiating shutdown.")
-        json_file = os.path.join(config.mcq_dir, mcq_files[0])
-        config.logger.info(f"Using default MCQ file: {json_file}")
-    else:
-        if os.path.isabs(args.input) or os.path.exists(args.input):
-            json_file = args.input
-        else:
-            json_file = os.path.join(config.mcq_dir, args.input)
 
-    # Load input file supporting both JSON array and JSONL.
-    data = []
-    try:
-        with open(json_file, "r", encoding="utf-8") as f:
-            content = f.read().strip()
-            if not content:
-                config.logger.error(f"Input file ({json_file}) is empty.")
-                config.initiate_shutdown("Initiating shutdown.")
-            # If the file begins with '[', assume it's a JSON array.
-            if content[0] == '[':
-                items = json.loads(content)
-                for item in items:
-                    if isinstance(item, list):
-                        data.extend(item)
-                    else:
-                        data.append(item)
+    # Configure verbosity
+
+    args_ns = argparse.Namespace(quiet=quiet, verbose=verbose)
+    use_progress_bar = config.configure_verbosity(args_ns)
+
+    # Set cache directory if provided
+    if cache_dir:
+        os.environ['HF_HOME'] = cache_dir
+        config.logger.info(f"Using cache directory: {cache_dir}")
+
+    # Resolve input file path
+    if not os.path.isabs(input_file) and not os.path.exists(input_file):
+        input_file = os.path.join(config.mcq_dir, input_file)
+
+    # Load data from JSON or JSONL
+    data: List[dict] = []
+    with open(input_file, 'r', encoding='utf-8') as f:
+        content = f.read().strip()
+    if not content:
+        raise ValueError(f"Input file {input_file} is empty.")
+    if content[0] == '[':
+        items = json.loads(content)
+        for itm in items:
+            if isinstance(itm, list):
+                data.extend(itm)
             else:
-                for line in content.splitlines():
-                    if not line.strip():
-                        continue
-                    try:
-                        item = json.loads(line.strip())
-                        if isinstance(item, list):
-                            data.extend(item)
-                        else:
-                            data.append(item)
-                    except json.JSONDecodeError as e:
-                        config.logger.warning(f"Skipping invalid JSON line: {e}")
-                        continue
-    except Exception as e:
-        config.logger.error(f"ERROR: File {json_file} not found or could not be read: {e}")
-        config.initiate_shutdown("Initiating shutdown.")
+                data.append(itm)
+    else:
+        for line in content.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                itm = json.loads(line)
+                if isinstance(itm, list):
+                    data.extend(itm)
+                else:
+                    data.append(itm)
+            except json.JSONDecodeError:
+                config.logger.warning(f"Skipping invalid JSON line: {line}")
 
     if not data:
-        config.logger.error("No valid data found in input file")
-        config.initiate_shutdown("Initiating shutdown.")
+        raise ValueError("No valid items found in input file.")
 
-    start_index = int(args.start)
-    if args.end == 'all':
-        data = data[start_index:]
+    # Slice data between start_index and end_index
+    start = start_index
+    if end_index == 'all':
+        slice_data = data[start:]
     else:
-        end_index = int(args.end)
-        data = data[start_index:end_index]
+        slice_data = data[start:int(end_index)]
 
-    total_items = len(data)
-    config.logger.info(f"Generating answers for {total_items} items using model {args.model}")
+    total = len(slice_data)
+    config.logger.info(f"Generating answers for {total} items with model {model_name}")
 
-    # Determine output file name.
-    if start_index == 0 and args.end == 'all':
-        output_file = f'answers_{args.model.replace("/","+")}.jsonl'
-    else:
-        output_file = f'answers_{args.model.replace("/","+")}_{args.start}_{args.end}.jsonl'
-    output_path = os.path.join(args.output if args.output else config.results_dir, output_file)
+    # Determine thread count
+    max_workers = parallel or config.defaultThreads
 
-    # Remove existing output file if present.
+    # Prepare output path
+    out_dir = output_dir or config.results_dir
+    os.makedirs(out_dir, exist_ok=True)
+    suffix = f"_{start}_{end_index}" if start != 0 or end_index != 'all' else ''
+    fname = f"answers_{model_name.replace('/','+')}{suffix}.jsonl"
+    output_path = os.path.join(out_dir, fname)
+
+    # Remove existing output
     if os.path.exists(output_path):
         os.remove(output_path)
 
-    SAVE_INTERVAL = config.saveInterval
-    config.logger.info(f"Write to results file every {SAVE_INTERVAL} QA's processed.")
-    output_buffer = []
-
-    if use_progress_bar:
-        pbar = tqdm(total=total_items, desc="Processing", unit="item")
-    else:
-        pbar = config.NoOpTqdm(total=total_items)
-
-    # Create the model instance before submitting tasks.
-    model = Model(args.model)
+    # Execute in parallel
+    buffer: List[dict] = []
+    save_int = config.saveInterval
+    model = Model(model_name)
     model.details()
 
+    if use_progress_bar:
+        pbar = tqdm(total=total, desc="Answering", unit="item")
+    else:
+        pbar = config.NoOpTqdm(total=total)
+
     with open(output_path, 'a', encoding='utf-8') as out_f:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=args.parallel) as executor:
-            future_to_index = {
-                executor.submit(process_qa_item, qa_item, idx, model): idx
-                for idx, qa_item in enumerate(data, start=1)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(process_qa_item, qa, idx, model): idx
+                for idx, qa in enumerate(slice_data, start=1)
             }
-            for future in concurrent.futures.as_completed(future_to_index):
-                idx, result = future.result()
-                if result is not None:
-                    output_buffer.append(result)
+            for fut in concurrent.futures.as_completed(futures):
+                idx, res = fut.result()
+                if res:
+                    buffer.append(res)
                 pbar.update(1)
-                if len(output_buffer) >= SAVE_INTERVAL:
-                    for item in output_buffer:
+                if len(buffer) >= save_int:
+                    for item in buffer:
                         out_f.write(json.dumps(item, ensure_ascii=False) + "\n")
                     out_f.flush()
-                    output_buffer = []
-        if output_buffer:
-            for item in output_buffer:
-                out_f.write(json.dumps(item, ensure_ascii=False) + "\n")
-            out_f.flush()
+                    buffer.clear()
+        # Flush remaining
+        for item in buffer:
+            out_f.write(json.dumps(item, ensure_ascii=False) + "\n")
+        out_f.flush()
     pbar.close()
     config.logger.info(f"Answers written to {output_path}")
 
-if __name__ == "__main__":
+    return output_path
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Generate answers for MCQs via LLM.'
+    )
+    parser.add_argument('-m','--model',    default=config.defaultModel)
+    parser.add_argument('-s','--start',    type=int, default=0)
+    parser.add_argument('-e','--end',      default='all')
+    parser.add_argument('-c','--cache-dir',default=os.getenv('HF_HOME'))
+    parser.add_argument('-i','--input',    default=None)
+    parser.add_argument('-o','--output',   default=None)
+    parser.add_argument('-p','--parallel', type=int, default=config.defaultThreads)
+    parser.add_argument('-q','--quiet',    action='store_true')
+    parser.add_argument('-v','--verbose',  action='store_true')
+    args = parser.parse_args()
+
+    try:
+        out_file = generate_answers_file(
+            input_file   = args.input,
+            model_name   = args.model,
+            output_dir   = args.output,
+            start_index  = args.start,
+            end_index    = args.end,
+            parallel     = args.parallel,
+            cache_dir    = args.cache_dir,
+            quiet        = args.quiet,
+            verbose      = args.verbose
+        )
+        print(out_file)
+    except Exception as e:
+        logging.error(str(e))
+        sys.exit(1)
+
+if __name__ == '__main__':
     main()
 

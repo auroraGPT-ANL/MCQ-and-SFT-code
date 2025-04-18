@@ -376,6 +376,9 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
             processed_file = os.path.join(output_dir, f'processed_{os.path.splitext(filename)[0]}.jsonl')
             file_path = os.path.join(input_dir, filename)
             if os.path.exists(processed_file) and not force:
+                if config.shutdown_event.is_set():
+                    #config.logger.info("Shutdown in progress; suppressing error details.")
+                    return
                 num_chunks = count_chunks_in_file(file_path, CHUNK_SIZE)
                 config.logger.info(f"Skipping {filename}: {num_chunks} existing chunks counted as successful")
                 pbar_total.update(num_chunks)

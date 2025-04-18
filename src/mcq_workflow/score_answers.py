@@ -1,228 +1,215 @@
 #!/usr/bin/env python
+"""
+score_answers.py
 
-# score_answers.py
-
-import sys
-import json
+Provides both a Python API and CLI for scoring answers produced by one model (A) using another model (B) in parallel.
+"""
 import os
+import json
 import time
 import argparse
 import statistics
 import logging
 import concurrent.futures
+from typing import Optional, List, Tuple
 from tqdm import tqdm
 
 from common import config
 from common.model_access import Model
 
-def score_answer(index, model, question: str, reference_answer: str, user_answer: str) -> float:
+
+def score_answer(index: int,
+                 model: Model,
+                 question: str,
+                 reference: str,
+                 user_answer: str) -> float:
     """
-    Calls the model to evaluate how consistent the user_answer is with the reference_answer.
-    Returns a numeric score (float) from 1 to 10.
+    Evaluate how consistent user_answer is with reference using model.
+    Returns score as float.
     """
     eval_prompt = config.score_main_prompt.format(
         question=question,
-        reference_answer=reference_answer,
+        reference_answer=reference,
         user_answer=user_answer
     )
     system_msg = config.score_main_system
-
     response = model.run(
         user_prompt=eval_prompt,
         system_prompt=system_msg,
         temperature=0.0
     )
-
     try:
-        score = float(response)
+        return float(response)
     except ValueError:
-        score = try_again_to_extract_score(model, user_answer)
+        # fallback
+        fallback_prompt = config.score_fallback_prompt.format(user_answer=user_answer)
+        fallback_system = config.score_fallback_system
+        try:
+            resp = model.run(
+                user_prompt=fallback_prompt,
+                system_prompt=fallback_system,
+                temperature=0.0
+            )
+            return float(resp)
+        except Exception:
+            config.logger.info(f"Failed fallback scoring for index {index}, returning 0.0")
+            return 0.0
 
-    return score
 
-def try_again_to_extract_score(model, user_answer: str) -> float:
+def process_qa_pair(index: int,
+                    qa_pair: dict,
+                    modelB: Model,
+                    modelA_name: str,
+                    modelB_name: str) -> Optional[Tuple[int, dict, float]]:
     """
-    Attempts to parse out a final numeric answer using the fallback prompt.
-    If that fails, returns 0.0.
+    Process one QA pair: compute score with modelB.
+    Returns (index, result_dict, eval_time) or None if invalid.
     """
-    fallback_prompt_text = config.score_fallback_prompt.format(user_answer=user_answer)
-    fallback_system_text = config.score_fallback_system
-
-    try:
-        response = model.run(
-            user_prompt=fallback_prompt_text,
-            system_prompt=fallback_system_text,
-            temperature=0.0
-        )
-        score = float(response)
-    except Exception:
-        config.logger.info(
-            f"Score of 0 for bad response++++\n{user_answer}\n+++++++++\n"
-        )
-        score = 0.0
-
-    return score
-
-def process_qa_pair(index, qa_pair, modelB, modelA_name, modelB_name):
-    """
-    Process a single QA pair:
-      - Extract fields from the QA pair.
-      - Evaluate the answer (using score_answer) and measure evaluation time.
-      - Return a tuple (index, result_dict, eval_time) with the updated QA data.
-    If any required field is missing, logs an error and returns None.
-    """
-    question         = qa_pair.get("question", "")
-    reference_answer = qa_pair.get("reference", "")
-    model_answer     = qa_pair.get("model", "")
-    gen_time         = qa_pair.get("gen_time", "")
-    file             = qa_pair.get("file", "")
-    filenum          = qa_pair.get("filenum", "")
-    chunknum         = qa_pair.get("chunknum", "")
-
-    if not question or not reference_answer or not model_answer:
-        config.logger.error(f"Bad item at index {index}: missing question, reference, or model answer.")
+    question = qa_pair.get("question")
+    reference = qa_pair.get("reference")
+    model_answer = qa_pair.get("model")
+    gen_time = qa_pair.get("gen_time")
+    file = qa_pair.get("file")
+    filenum = qa_pair.get("filenum")
+    chunknum = qa_pair.get("chunknum")
+    if not (question and reference and model_answer):
+        config.logger.error(f"Skipping invalid QA at index {index}")
         return None
-
-    start_time = time.time()
-    score = score_answer(index, modelB, question, reference_answer, model_answer)
-    eval_time = time.time() - start_time
-
+    start = time.time()
+    score = score_answer(index, modelB, question, reference, model_answer)
+    eval_time = time.time() - start
     result = {
         'modelA': modelA_name,
         'modelB': modelB_name,
         'index': index,
         'question': question,
-        'reference': reference_answer,
+        'reference': reference,
         'model': model_answer,
         'score': score,
         'gen_time': gen_time,
-        'eval_time': f'{eval_time:.4f}',
+        'eval_time': f"{eval_time:.4f}",
         'file': file,
         'filenum': filenum,
         'chunknum': chunknum
     }
     return (index, result, eval_time)
 
-def main():
-    parser = argparse.ArgumentParser(
-        description='Use LLM B to rate answers provided by LLM A in parallel'
-    )
-    parser.add_argument('-a','--modelA_name',
-                        help='Model A name', default=config.model["name"])
-    parser.add_argument('-b','--modelB_name',
-                        help='Model B name', default=config.model_b["name"])
-    parser.add_argument('-o','--output',
-                        help='Output directory for results', default=config.results_dir)
-    parser.add_argument('-f','--force',
-                        help='Process even if score file exists', action="store_true")
-    parser.add_argument('-c', "--cache-dir", type=str,
-                        default=os.getenv("HF_HOME"),
-                        help="Custom cache directory for Hugging Face")
-    parser.add_argument('-q','--quiet', action='store_true',
-                        help='No progress bar or messages')
-    parser.add_argument('-v','--verbose', action='store_true',
-                        help='Enable verbose logging')
-    parser.add_argument('-p','--parallel', type=int, default=4,
-                        help='Number of parallel threads (default: 4)')
-    args = parser.parse_args()
 
-    # Set logging level and progress bar usage
-    if args.verbose:
+def score_answers_file(
+    modelA_name: str,
+    modelB_name: str,
+    output_dir: str,
+    parallel: int = 4,
+    force: bool = False,
+    cache_dir: Optional[str] = None,
+    quiet: bool = False,
+    verbose: bool = False
+) -> str:
+    """
+    Main API to score answers: reads answers JSONL, scores them, writes scores JSONL.
+    Returns path to the scores file.
+    """
+    # configure logging & progress
+    if verbose:
         config.logger.setLevel(logging.INFO)
-        use_progress_bar = False
-    elif args.quiet:
+        use_bar = False
+    elif quiet:
         config.logger.setLevel(logging.CRITICAL)
-        use_progress_bar = False
+        use_bar = False
     else:
         config.logger.setLevel(logging.WARNING)
-        use_progress_bar = True
-
-    if args.cache_dir:
-        os.environ["HF_HOME"] = args.cache_dir
-        config.logger.info(f"Using Hugging Face cache directory: {args.cache_dir}")
-
-    output_dir = args.output
-    modelA_name = args.modelA_name
-    modelB_name = args.modelB_name
-    modelB = Model(modelB_name)
-
-    # Load answer data in JSONL format (one JSON object per line)
-    answer_file = os.path.join(output_dir, 'answers_' + modelA_name.replace('/', '+') + '.jsonl')
-    #config.logger.info(f'Looking for {answer_file}')
+        use_bar = True
+    # HF cache
+    if cache_dir:
+        os.environ["HF_HOME"] = cache_dir
+        config.logger.info(f"Using HF cache dir: {cache_dir}")
+    # prepare files
+    answer_file = os.path.join(output_dir,
+        f'answers_{modelA_name.replace("/","+")}.jsonl')
     if not os.path.exists(answer_file):
-        config.logger.error(f'No answers file for {modelA_name}')
-        config.initiate_shutdown("Initiating shutdown.")
+        config.logger.error(f"Missing answers file: {answer_file}")
+        config.initiate_shutdown("No answers to score.")
     score_file = os.path.join(
         output_dir,
         f'scores_{modelA_name.replace("/","+")}={modelB_name.replace("/","+")}.jsonl'
     )
-    if os.path.exists(score_file) and not args.force:
-        config.logger.info(f"Skipping {score_file} (already exists)")
-
-    with open(answer_file, "r", encoding="utf-8") as f:
+    if os.path.exists(score_file) and not force:
+        config.logger.info(f"Skipping existing: {score_file}")
+        return score_file
+    # load data
+    with open(answer_file, 'r', encoding='utf-8') as f:
         data = [json.loads(line) for line in f if line.strip()]
-
-    total_items = len(data)
-    config.logger.info(f"Generating answers for {total_items} MCQs using {modelB_name}")
-    if use_progress_bar:
-        pbar = tqdm(total=total_items, desc="Processing", unit="item")
-    else:
-        pbar = config.NoOpTqdm(total=total_items)
-
-    SAVE_INTERVAL = config.saveInterval
-    output_buffer = []
-    scores_list = []
-    eval_total_time = 0.0
-    processed_count = 0
-
+    total = len(data)
+    config.logger.info(f"Scoring {total} QA pairs using {modelB_name}")
+    pbar = tqdm(total=total, desc="Scoring", unit="item") if use_bar else config.NoOpTqdm(total=total)
+    # exec
+    modelB = Model(modelB_name)
+    modelB.details()
+    os.makedirs(output_dir, exist_ok=True)
     if os.path.exists(score_file):
         os.remove(score_file)
-    out_f = open(score_file, 'a', encoding='utf-8')
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=args.parallel) as executor:
-        future_to_index = {
-            executor.submit(process_qa_pair, idx, qa_item, modelB, modelA_name, modelB_name): idx
-            for idx, qa_item in enumerate(data, start=1)
-        }
-        for future in concurrent.futures.as_completed(future_to_index):
-            res = future.result()
-            if res is None:
-                processed_count += 1
+    buffer: List[dict] = []
+    scores: List[float] = []
+    total_eval = 0.0
+    count = 0
+    with open(score_file, 'a', encoding='utf-8') as out_f:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=parallel) as exe:
+            futures = [exe.submit(process_qa_pair, idx, qa, modelB, modelA_name, modelB_name)
+                       for idx, qa in enumerate(data, start=1)]
+            for fut in concurrent.futures.as_completed(futures):
+                res = fut.result()
+                count += 1
+                if res:
+                    _, item, et = res
+                    buffer.append(item)
+                    scores.append(item['score'])
+                    total_eval += et
+                if len(buffer) >= config.saveInterval:
+                    for it in buffer:
+                        out_f.write(json.dumps(it, ensure_ascii=False) + "\n")
+                    out_f.flush()
+                    buffer.clear()
                 pbar.update(1)
-                continue
-            idx, result, eval_time = res
-            output_buffer.append(result)
-            scores_list.append(result['score'])
-            eval_total_time += eval_time
-            processed_count += 1
-
-            if processed_count % SAVE_INTERVAL == 0:
-                avg_eval_time = eval_total_time / processed_count
-                config.logger.info(f"{processed_count} items processed (avg eval time = {avg_eval_time:.2f}s)")
-                for item in output_buffer:
-                    out_f.write(json.dumps(item, ensure_ascii=False) + "\n")
-                out_f.flush()
-                output_buffer = []
-            pbar.update(1)
-
-    pbar.close()
-    if output_buffer:
-        for item in output_buffer:
-            out_f.write(json.dumps(item, ensure_ascii=False) + "\n")
+        # flush remaining
+        for it in buffer:
+            out_f.write(json.dumps(it, ensure_ascii=False) + "\n")
         out_f.flush()
-    out_f.close()
+    pbar.close()
+    # summary logs
+    if scores:
+        mean = statistics.mean(scores)
+        var = statistics.pvariance(scores)
+        std = statistics.stdev(scores) if len(scores)>1 else 0.0
+        config.logger.info(
+            f"Completed scoring. mean={mean:.2f}, var={var:.2f}, std={std:.2f}" )
+    return score_file
 
-    if scores_list:
-        mean_score = statistics.mean(scores_list)
-        variance_score = statistics.pvariance(scores_list)
-        std_deviation = statistics.stdev(scores_list) if len(scores_list) > 1 else 0.0
-        config.logger.info(f"Scores computed: mean = {mean_score:.2f}, variance = {variance_score:.2f}, std deviation = {std_deviation:.2f}")
-    else:
-        config.logger.warning("No valid QA pairs found or no scores computed.")
 
-if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        config.initiate_shutdown("User interrupt - initiating shutdown.")
+def main():
+    parser = argparse.ArgumentParser(
+        description='Score answers: LLM B rates answers from LLM A'
+    )
+    parser.add_argument('-a','--modelA_name', default=config.model['name'])
+    parser.add_argument('-b','--modelB_name', default=config.model_b['name'])
+    parser.add_argument('-o','--output', default=config.results_dir)
+    parser.add_argument('-f','--force', action='store_true')
+    parser.add_argument('-c','--cache-dir', default=os.getenv('HF_HOME'))
+    parser.add_argument('-q','--quiet', action='store_true')
+    parser.add_argument('-v','--verbose', action='store_true')
+    parser.add_argument('-p','--parallel', type=int, default=4)
+    args = parser.parse_args()
+    out = score_answers_file(
+        modelA_name=args.modelA_name,
+        modelB_name=args.modelB_name,
+        output_dir=args.output,
+        parallel=args.parallel,
+        force=args.force,
+        cache_dir=args.cache_dir,
+        quiet=args.quiet,
+        verbose=args.verbose
+    )
+    print(out)
+
+if __name__ == '__main__':
+    main()
 

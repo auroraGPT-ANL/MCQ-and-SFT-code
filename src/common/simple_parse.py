@@ -1,29 +1,30 @@
 #!/usr/bin/env python
+"""
+simple_parse.py
 
+Convert PDF to JSON. Provides both a CLI entrypoint and a Python API.
+"""
 import os
 import sys
 import json
 import re
+import argparse
 import PyPDF2
 from pdfminer.high_level import extract_text
 from common import config
-import argparse
 from tqdm import tqdm
 
 
 def clean_string(s: str) -> str:
     """
     Encode to UTF-8 with error handling, then decode back to str.
-    - 'replace' will insert a replacement character (�) where invalid surrogates appear.
-    - 'ignore' would instead silently remove them.
     """
     return s.encode("utf-8", errors="replace").decode("utf-8")
 
 
 def clean_data(obj):
     """
-    Recursively traverse a Python object (list, dict, string, etc.)
-    and clean all strings.
+    Recursively traverse a Python object and clean all strings.
     """
     if isinstance(obj, str):
         return clean_string(obj)
@@ -35,9 +36,9 @@ def clean_data(obj):
         return obj
 
 
-def extract_text_from_pdf(pdf_path: str) -> str:
+def extract_text_from_pdf(pdf_path: str) -> (str, str):
     """
-    Extract all text from a PDF file, given its file path.
+    Extract all text from a PDF file, returning (text, parser_used).
     """
     text_content = []
     with open(pdf_path, 'rb') as f:
@@ -48,57 +49,67 @@ def extract_text_from_pdf(pdf_path: str) -> str:
                 if page_text:
                     text_content.append(page_text)
             return ("\n".join(text_content), 'PyPDF2')
-        except:
+        except Exception:
             config.logger.warning(f'ERROR extracting with PyPDF2 from {pdf_path}. Trying pdfminer.')
             text = extract_text(pdf_path)
             return (text, 'pdfminer')
 
 
 def process_directory(input_dir: str, output_dir: str = "output_files", use_progress_bar: bool = True):
-    # Gather all PDF files
-    files = [
-        f for f in os.listdir(input_dir) if f.lower().endswith(".pdf")
-    ]
+    """
+    Iterate over PDFs in input_dir, extract text, and write JSON files to output_dir.
+    """
+    files = [f for f in os.listdir(input_dir) if f.lower().endswith(".pdf")]
     total_files = len(files)
     if total_files == 0:
         config.logger.warning(f"No PDF papers found in {input_dir}.")
         return
 
-    # Create progress bar if use_progress_bar is True
     if use_progress_bar:
         pbar = tqdm(total=total_files, desc="Processing PDFs", unit="file")
     else:
         pbar = config.NoOpTqdm(total=total_files)
 
-    # Iterate over files
+    os.makedirs(output_dir, exist_ok=True)
+
     for i, filename in enumerate(files, start=1):
         file_path = os.path.join(input_dir, filename)
-
         basename, _ = os.path.splitext(filename)
-        out_file = basename + ".json"
-        out_path = os.path.join(output_dir, out_file)
+        out_path = os.path.join(output_dir, basename + ".json")
+
         if os.path.isfile(out_path):
             config.logger.info(f'Already exists: {i}/{total_files}: {out_path}')
             pbar.update(1)
             continue
 
         config.logger.info(f"Processing file {i}/{total_files}: {file_path}")
-
         (text, parser) = extract_text_from_pdf(file_path)
-
         json_structure = {'path': file_path, 'text': text, 'parser': parser}
 
         with open(out_path, 'w', encoding='utf-8') as out_f:
             json.dump(json_structure, out_f, ensure_ascii=False, indent=2)
-        
         pbar.update(1)
-    
+
     pbar.close()
     config.logger.info("Processing complete")
 
 
+def parse_pdfs_dir(input_dir: str,
+                   output_dir: str,
+                   use_progress_bar: bool = True) -> str:
+    """
+    API function: extract all PDFs from input_dir, write JSON to output_dir,
+    and return the output_dir path.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    process_directory(input_dir, output_dir, use_progress_bar)
+    return output_dir
+
+
 def main():
-    parser = argparse.ArgumentParser(description='Program to extract text from PDFs and store in JSON files')
+    parser = argparse.ArgumentParser(
+        description='Convert PDF files to JSON via simple_parse.py'
+    )
     parser.add_argument('-i', '--input', help='Directory containing input PDF files',
                         default=config.papers_dir)
     parser.add_argument('-o', '--output', help='Output directory for JSON files',
@@ -109,14 +120,15 @@ def main():
                         help='Enable verbose logging')
 
     args = parser.parse_args()
+    use_pb = config.configure_verbosity(args)
 
-    use_progress_bar = config.configure_verbosity(args)
-
-    input_directory = args.input
-    output_directory = args.output
-
-    os.makedirs(output_directory, exist_ok=True)
-    process_directory(input_directory, output_directory, use_progress_bar)
+    result_dir = parse_pdfs_dir(
+        input_dir=args.input,
+        output_dir=args.output,
+        use_progress_bar=use_pb
+    )
+    # Print result for CLI capture
+    print(result_dir)
 
 
 if __name__ == "__main__":
