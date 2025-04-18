@@ -16,6 +16,7 @@ agentic system following the Google Co-Scientist model.  Other agentic systems s
 live in their own branches at the same layer (peers with agent, src, and legacy).
 - More work is needed to document these new directories with their own README.md files.
 
+```
 MCQ-and-SFT-code/
 ├─ src/                 # single source of truth   ← keep everything you already refactored
 │    ├─ common/
@@ -35,6 +36,7 @@ MCQ-and-SFT-code/
 │    │    └─ agents/
 │    └─ tests/
 └─ …
+```
 
 ### v2.0 - 16Apr2025
 - major reorg of **src** directory as follows. Each of these src/ subdirectories is a Python *module*:
