@@ -1,19 +1,10 @@
 # Changelog
 
 ### Stable-V1 18April2025
-- added code to enable all python scripts (in src/common and src/mcq\_workflow (not
-  yet done with src/nugget\_workflow and src/tune\_workflow) so that they can
-  function as traditional python modules (called via CLI) or as python functions
-  as part of an agentic system.
-- a second phase of reorg to create the following. The "src" branch of this tree
-contains all of the modules that are call-able via CLI or shell scripts, or used as part of
-an agentic system.  
-- other workflow components would logically be created in directories within src, peers
-  to the four directories already there, and leveraging (and/or creating new)
-  src/common functions as needed.
-- The "agent" branch of the tree is an experiment to implemnt the mcq\_workflow as an 
-agentic system following the Google Co-Scientist model.  Other agentic systems should
-live in their own branches at the same layer (peers with agent, src, and legacy).
+- added code to enable all python scripts (in src/common and src/mcq\_workflow (not yet done with src/nugget\_workflow and src/tune\_workflow) so that they can function as traditional python modules (called via CLI) or as python functions as part of an agentic system.
+- a second phase of reorg to create the following. The "src" branch of this tree contains all of the modules that are call-able via CLI or shell scripts, or used as part of an agentic system.  
+- other workflow components would logically be created in directories within src, peers to the four directories already there, and leveraging (and/or creating new) src/common functions as needed.
+- The "agent" branch of the tree is an experiment to implemnt the mcq\_workflow as an agentic system following the [Google Co-Scientist model](https://research.google/blog/accelerating-scientific-breakthroughs-with-an-ai-co-scientist/).  Other agentic systems should live in their own branches at the same layer (peers with agent, src, and legacy).
 - More work is needed to document these new directories with their own README.md files.
 
 ```
