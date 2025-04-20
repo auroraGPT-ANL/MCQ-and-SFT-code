@@ -1,21 +1,51 @@
-# Code for Creating and Scoring Multiple Choice Questions (MCQs) from Papers
+# Code for Creating Scientific Training Data from Papers
 
 ## Overview
 
-This repository provides Python programs for:
-* Generating and evaluating Multiple Choice Questions (MCQs)
-* Fine-tuning models based on supplied data
-* Workflow tools for scientific paper analysis
+This repository provides Python programs for creating training data to fine-tune models using
+scientific papers.  There are two workflows implemented (or being implemented) here.  The first, 
+Multiple Choice Question (MCQ) Workflow, does the following:
+1.  Converts PDF-format papers into JSON
+2.  Uses an AI model to generate Multiple Choice Questions (MCQs) for each paper.  Each paper is split into n-token *chunks*, and the model creates an MCQ for each chunk.
+3.  Uses one or more models to answer the MCQs
+4.  All models used score answers from all other models.
 
-[View Example Workflow Flowchart](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/CeC/MCQ-Workflow.png)
+A second workflow, still under construction, will 
+1.  Convert PDF-format papers into JSON
+2.  Use an AI model to extract Knowlege Nuggets from each paper.  Each paper is split into n-token *chunks*, and the will extract knowledge nuggets from each.
+3.  Test each nugget using a model to be fine-tuned, eliminating nuggets that are already known to the model. This will create a set of *New* Knowledge Nuggets (NKNs) for fine-tuning the target model.
+
+The current, stable mcq\_workflow system operates from the command line, where each component of the workflow can be run as a stand-alone tool or as part of a shell script, 'legacy/scripts/run\_mcq\_workflow.sh'. This script implements the workflow as illustrated in 
+[this flowchart](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/CeC/MCQ-Workflow.png).
+
+Finally, this repo contains a work-in-progress project to convert these two workflows into agentic systems.
+
+The repository is thus organized as follows:
+
+1. Stable workflow in 'legacy/scripts' uses components in 'src' including:
+* 'src/common' - tools common to both the MCQ and Nugget workflows, including model access, configuration, etc., 
+* 'src/mcq\_workflow' - tools specific to generating, answering, and scoring MCQs, 
+* 'src/nugget\_workflow' - tools specific to extracting knowledge nuggets and screening for those not already know by a target model,
+* 'src/test' - test routines including a stub model for testing workflows quickly without model delays (including offline testing), and
+* 'src/tune\_workflow' - tools to take MCQs (and eventually NKNs) to fine-tune a model. (also under construction, thus not yet included in either workflow)
+
+All of the components in '/src/common', '/src/mcq\_workflow', and '/src/nugget\_workflow' work both as Python
+modules (called form the CLI) and as part of an exploratory agent-based system, where each pipeline component is a
+subclass of 'agent\_base.Agent', which enforces a python contract of the form:
+```
+def run(context: dict) -> dict 
+```
+Each component of the pipeline performs its specific set of tasks and returns its results to a shared 'context'. A light-weight 'orchestrator.py' imports and runs the agents.
+
+The remainder of this README is currently specific to the CLI (legacy, stable) MCQ workflow.
 
 **Contact:** Please email {foster|stevens|catlett}@anl.gov if you see things that are unclear or missing.
 
 ## Table of Contents
-- [Prerequisites](#prerequisites)
-- [Workflow Overview](#workflow-overview)
-- [Workflow Execution](#workflow-execution)
+- [MCQ Workflow Overview](#workflow-overview)
+- [MCQ Workflow Execution](#workflow-execution)
 - [Configuration](#configuration)
+- [Models](#models)
 - [Notes](#notes)
 
 
@@ -234,12 +264,14 @@ Options include:
   - `-q / --quiet`: Suppress output
   - Default: Progress bar
 
-## Prerequisites for Using Argonne 
+## Models
 
-[ALCF Inference Service](https://github.com/argonne-lcf/inference-endpoints/tree/main)
+In 'src/common' you will find the 'model\_access' module, where a number of model *types* are
+supported including OpenAI, HF, and Argonne-specific services (ALCF Inference Service, Argo, etc.).
+New model types can be added through ths model\_access module.
 
 ### ALCF Inference Service Setup
-Before you start, we recommend following the instructions for
+Before you start--if you are using this service--we recommend following the instructions for
 [ALCF Inference Service Prerequisites](https://github.com/argonne-lcf/inference-endpoints?tab=readme-ov-file#%EF%B8%8F-prerequisites)
 to set up your ALCF authentication token, which is required to access models via the inference service.
 
