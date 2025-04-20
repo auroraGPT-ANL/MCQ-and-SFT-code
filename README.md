@@ -44,7 +44,10 @@ The remainder of this README is currently specific to the CLI (legacy, stable) M
 
 **Contact:** Please email {foster|stevens|catlett}@anl.gov if you see things that are unclear or missing.
 
-## Table of Contents
+## MCQ Workflow
+
+### Table of Contents
+
 - [MCQ Workflow Overview](#workflow-overview)
 - [MCQ Workflow Execution](#workflow-execution)
 - [Configuration](#configuration)
