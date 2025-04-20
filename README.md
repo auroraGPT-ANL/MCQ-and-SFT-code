@@ -4,13 +4,13 @@
 
 This repository provides Python programs for creating training data to fine-tune models using
 scientific papers.  There are two workflows implemented (or being implemented) here.  The first, 
-Multiple Choice Question (MCQ) Workflow, does the following:
+**Multiple Choice Question (MCQ) Workflow**, does the following:
 1.  Converts PDF-format papers into JSON
 2.  Uses an AI model to generate Multiple Choice Questions (MCQs) for each paper.  Each paper is split into n-token *chunks*, and the model creates an MCQ for each chunk.
 3.  Uses one or more models to answer the MCQs
 4.  All models used score answers from all other models.
 
-A second workflow, still under construction, will 
+A second workflow, **New Knowledge Nugget (NKN) Workflow**, still under construction, will 
 1.  Convert PDF-format papers into JSON
 2.  Use an AI model to extract Knowlege Nuggets from each paper.  Each paper is split into n-token *chunks*, and the will extract knowledge nuggets from each.
 3.  Test each nugget using a model to be fine-tuned, eliminating nuggets that are already known to the model. This will create a set of *New* Knowledge Nuggets (NKNs) for fine-tuning the target model.
@@ -18,11 +18,11 @@ A second workflow, still under construction, will
 The current, stable mcq\_workflow system operates from the command line, where each component of the workflow can be run as a stand-alone tool or as part of a shell script, 'legacy/scripts/run\_mcq\_workflow.sh'. This script implements the workflow as illustrated in 
 [this flowchart](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/CeC/MCQ-Workflow.png).
 
-Finally, this repo contains a work-in-progress project to convert these two workflows into agentic systems.
+Finally, this repo contains a work-in-progress, exploratory project to use the components from these two workflows as part of an **agentic systems**.
 
 The repository is thus organized as follows:
 
-1. Stable workflow in 'legacy/scripts' uses components in 'src' including:
+1. Stable MCQ workflow in `legacy/scripts` uses components in 'src' including:
 * 'src/common' - tools common to both the MCQ and Nugget workflows, including model access, configuration, etc., 
 * 'src/mcq\_workflow' - tools specific to generating, answering, and scoring MCQs, 
 * 'src/nugget\_workflow' - tools specific to extracting knowledge nuggets and screening for those not already know by a target model,
