@@ -84,7 +84,7 @@ export PYTHONPATH="$(pwd)/src"
 ```
 Do this every time you activate the conda env, or add this to your '~/.zshrc':
 ```bash
-export PYTHONPATH="FULL_PATH_ON_YOUR_HOST/ALCF/MCQ-and-SFT-code/src"
+export PYTHONPATH="FULL_PATH_ON_YOUR_HOST/MCQ-and-SFT-code/src"
 ```
 (Be sure to fill in FULL\_PATH\_ON\_YOUR\_HOST)
 
