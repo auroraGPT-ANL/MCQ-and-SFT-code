@@ -22,20 +22,20 @@ Finally, this repo contains a work-in-progress, exploratory project to use the c
 
 The repository is thus organized as follows:
 
-1. Stable MCQ workflow in `legacy/scripts` uses components in 'src' including:
-* 'src/common' - tools common to both the MCQ and Nugget workflows, including model access, configuration, etc., 
-* 'src/mcq\_workflow' - tools specific to generating, answering, and scoring MCQs, 
-* 'src/nugget\_workflow' - tools specific to extracting knowledge nuggets and screening for those not already know by a target model,
-* 'src/test' - test routines including a stub model for testing workflows quickly without model delays (including offline testing), and
-* 'src/tune\_workflow' - tools to take MCQs (and eventually NKNs) to fine-tune a model. (also under construction, thus not yet included in either workflow)
+1. Stable MCQ workflow in *legacy/scripts* uses components in *src* including:
+* *src/common* - tools common to both the MCQ and Nugget workflows, including model access, configuration, etc., 
+* *src/mcq\_workflow* - tools specific to generating, answering, and scoring MCQs, 
+* *src/nugget\_workflow* - tools specific to extracting knowledge nuggets and screening for those not already know by a target model,
+* *src/test* - test routines including a stub model for testing workflows quickly without model delays (including offline testing), and
+* *src/tune\_workflow* - tools to take MCQs (and eventually NKNs) to fine-tune a model. (also under construction, thus not yet included in either workflow)
 
-All of the components in '/src/common', '/src/mcq\_workflow', and '/src/nugget\_workflow' work both as Python
+All of the components in *src/common* *src/mcq\_workflow* and *src/nugget\_workflow* work both as Python
 modules (called form the CLI) and as part of an exploratory agent-based system, where each pipeline component is a
-subclass of 'agent\_base.Agent', which enforces a python contract of the form:
+subclass of *agent\_base.Agent* which enforces a python contract of the form:
 ```
 def run(context: dict) -> dict 
 ```
-Each component of the pipeline performs its specific set of tasks and returns its results to a shared 'context'. A light-weight 'orchestrator.py' imports and runs the agents.
+Each component of the pipeline performs its specific set of tasks and returns its results to a shared *context* A light-weight *orchestrator.py* imports and runs the agents.
 
 The remainder of this README is currently specific to the CLI (legacy, stable) MCQ workflow.
 
@@ -65,11 +65,11 @@ mkdir _PAPERS _JSON _MCQ _RESULTS
 3. **Set Up Conda Environment:**
 
 Important note: this install has been tested on MacOS (15.4) running on Apple M2 silicon. On 
-other platforms the specifics in 'environment.yml' may need to be tweaked.
+other platforms the specifics in *environment.yml* may need to be tweaked.
 
 Option 1: Update your existing Conda environment
 ```bash
-conda env update --name <your_conda_env> --file environment.yml
+conda env update --name YOUR_CONDA_ENV --file environment.yml
 ```
 
 Option 2: Create new environment
