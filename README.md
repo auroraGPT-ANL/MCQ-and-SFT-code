@@ -16,7 +16,10 @@ A second workflow, **New Knowledge Nugget (NKN) Workflow**, still under construc
 3.  Test each nugget using a model to be fine-tuned, eliminating nuggets that are already known to the model. This will create a set of *New* Knowledge Nuggets (NKNs) for fine-tuning the target model.
 
 The current, stable mcq\_workflow system operates from the command line, where each component of the workflow can be run as a stand-alone tool or as part of a shell script, 'legacy/scripts/run\_mcq\_workflow.sh'. This script implements the workflow as illustrated in 
-[this flowchart](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/CeC/MCQ-Workflow.png).
+[this flowchart](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/CeC/MCQ-Workflow.png). If only interested in this version, and not tinkering, you may prefer to download the
+[Stable-Snapshot: Version-1](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/releases/tag/Stable-V1)
+release (tagged in this repo as
+[Stable-V1](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/tree/Stable-V1)).
 
 Finally, this repo contains a work-in-progress, exploratory project to use the components from these two workflows as part of an **agentic systems**.
 
