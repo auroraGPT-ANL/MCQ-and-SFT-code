@@ -411,7 +411,6 @@ class Model:
                 logger.warning(f"Exception: {str(e)[:80]}...")
                 initiate_shutdown("Initiating shutdown.")
         elif self.model_type == 'Test':
-            logger.info(f"Running test model with prompt: {user_prompt[:50]}...")
             return self.test_model.generate_response(user_prompt, system_prompt)
         else:
             logger.warning(f"Unknown model type: {self.model_type}")
