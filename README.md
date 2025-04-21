@@ -190,14 +190,14 @@ python -m common.simple_parse -i _PAPERS -o _JSON
 ```
 
 #### 2. Generate MCQs
-If using the ALCF inference endpoints, authenticate with:
+**If using the ALCF inference endpoints** (skip if not), authenticate with:
 ```bash
 python -m common.inference_auth_token authenticate
 ```
 
 Generate MCQs (using default or specified model)
 ```bash
-python -m generate_mcqs
+python -m mcq_workflow.generate_mcqs
 ```
 or to specify a different model than in *config.yml*:
 ```bash
@@ -218,27 +218,27 @@ python -m common.select_mcqs_at_random -i MCQ-combined.json -o MCQ-subset.json -
 #### 5. Generate Answers
 Using model from config.yml
 ```bash
-python -m generate_answers -i MCQ-subset.json
+python -m mcq_workflow.generate_answers -i MCQ-subset.json
 ```
 Or to specify a different model than the one in *config.yml*:
 ```bash
-python -m generate_answers -i MCQ-subset.json -m 'alcf:meta-llama/Meta-Llama-3-70B-Instruct'
+python -m mcq_workflow.generate_answers -i MCQ-subset.json -m 'alcf:meta-llama/Meta-Llama-3-70B-Instruct'
 ```
 
 #### 6. Score Answers
 Using models from config.yml
 ```bash
-python -m score_answers
+python -m mcq_workflow.score_answers
 ```
 
 Or to specify models explicitly (different than the ones in *config.yml*:
 ```bash
-python -m score_answers -a 'model-A' -b 'model-B'
+python -m mcq_workflow.score_answers -a 'model-A' -b 'model-B'
 ```
 
 #### 7. Review Status
 ```bash
-python -m review_status -i MCQ-combined.json
+python -m mcq_workflow.review_status 
 ```
 
 ## Configuration
