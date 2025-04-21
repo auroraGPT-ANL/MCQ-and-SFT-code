@@ -1,16 +1,17 @@
-# agent/src/agents/mcq_agent.py
-
-from agent_base import Agent
+import os
+from agents.agent_base import Agent
 from mcq_workflow.generate_mcqs import generate_mcqs
+from common import config
 
 class MCQAgent(Agent):
-    def run(self, context: dict) -> dict:
-        parsed_dir = context["parsed_dir"]
-        p_value   = context["p_value"]
-        v_flag    = context["v_flag"]
-        # call your generate_mcqs entrypoint
-        output_file = generate_mcqs(input_dir=parsed_dir,
-                                    threads=p_value,
-                                    verbose=bool(v_flag))
-        return {"mcq_file": output_file}
+    def run(self, ctx):
+        parsed_dir = ctx["parsed_dir"]
+        mcq_out    = ctx.get("mcq_out", config.mcq_dir)
+        os.makedirs(mcq_out, exist_ok=True)
+        out = generate_mcqs(input_dir=parsed_dir,
+                            threads=ctx["p_value"],
+                            verbose=ctx["v_flag"],
+                            output_dir=mcq_out,
+                            force=ctx["force_mcq"])
+        return {"mcq_out": out}
 

@@ -171,6 +171,12 @@ defaultModelB = _model_name(model_b) or _CONFIG.get("defaultModelB")
 defaultModelC = _model_name(model_c)
 defaultModelD = _model_name(model_d)
 
+# for the agents
+#model_list = [m["name"] for m in cfg["models"]]
+#model_aliases = [m.get("alias", m["name"]) for m in cfg["models"]]
+#defaultModel = model_list[0]
+#otherModels  = model_list[1:]
+
 # Prompts
 prompts = _CONFIG.get("prompts", {})
 system_message   = prompts.get("system_message", "")
