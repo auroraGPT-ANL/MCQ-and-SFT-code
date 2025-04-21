@@ -159,23 +159,22 @@ trouble with -p up to perhaps ~20.
 
 **Examples:**
 
+*(With CWD at the repo root, where _PAPERS, etc. reside)*
+
 Run with default 8-way parallel, in verbose mode to see progress messages
 ```bash
-./scripts/run_mcq_workflow.sh -v
+./legacy/scripts/run_mcq_workflow.sh -v
 ```
 
 Run with 16-way parallel
 ```bash
-./run_mcq_workflow.sh -p 16
+./legacy/scripts/run_mcq_workflow.sh -p 16
 ```
 
 Run with 20 randomly selected MCQs
 ```bash
-./run_mcq_workflow.sh -n 20
+./legacy/scripts//run_mcq_workflow.sh -n 20
 ```
-
-Other options:
- -v --verbose - progress messages (default is a progress bar for each step)
 
 ### Detailed Step-by-Step Workflow
 
