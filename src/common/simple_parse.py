@@ -7,7 +7,6 @@ Convert PDF to JSON. Provides both a CLI entrypoint and a Python API.
 import os
 import sys
 import json
-import re
 import argparse
 import PyPDF2
 from pdfminer.high_level import extract_text
@@ -39,9 +38,11 @@ def clean_data(obj):
 def extract_text_from_pdf(pdf_path: str) -> (str, str):
     """
     Extract all text from a PDF file, returning (text, parser_used).
+    Returns (None, None) if both parsers fail.
     """
     text_content = []
     with open(pdf_path, 'rb') as f:
+        # First try PyPDF2
         try:
             reader = PyPDF2.PdfReader(f)
             for page in reader.pages:
@@ -51,8 +52,14 @@ def extract_text_from_pdf(pdf_path: str) -> (str, str):
             return ("\n".join(text_content), 'PyPDF2')
         except Exception:
             config.logger.warning(f'ERROR extracting with PyPDF2 from {pdf_path}. Trying pdfminer.')
-            text = extract_text(pdf_path)
-            return (text, 'pdfminer')
+            # Now try pdfminer
+            try:
+                text = extract_text(pdf_path)
+                return (text, 'pdfminer')
+            except Exception as e:
+                # Give INFO and skip this file
+                config.logger.info(f'ERROR extracting with pdfminer from {pdf_path}: {e}. Skipping file.')
+                return (None, None)
 
 
 def process_directory(input_dir: str, output_dir: str = "output_files", use_progress_bar: bool = True):
@@ -83,9 +90,13 @@ def process_directory(input_dir: str, output_dir: str = "output_files", use_prog
             continue
 
         config.logger.info(f"Processing file {i}/{total_files}: {file_path}")
-        (text, parser) = extract_text_from_pdf(file_path)
-        json_structure = {'path': file_path, 'text': text, 'parser': parser}
+        text, parser = extract_text_from_pdf(file_path)
+        if text is None:
+            # Skipped because both parsers failed
+            pbar.update(1)
+            continue
 
+        json_structure = {'path': file_path, 'text': text, 'parser': parser}
         with open(out_path, 'w', encoding='utf-8') as out_f:
             json.dump(json_structure, out_f, ensure_ascii=False, indent=2)
         pbar.update(1)
