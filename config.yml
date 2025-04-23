@@ -30,12 +30,12 @@ timeout:    45            # model query timeout
   #name:        "local:qwen2.5-7b-instruct-1m"
   #name:        "local:qwen2.5-7b-instruct-1m"
   #name:        "local:deepseek-r1-distill-llama-8b"
+  #name:         "test:test"
 
 # this model is the default for Model-A for score_answers.py
 #
 model:
-  name:         "test:test"
-  #name:         "argo:gpt4"
+  name:         "argo:gpt4"
   temperature:  0.7
   baseModel:   "None"
   Tokenizer:   "None"
