@@ -34,8 +34,8 @@ timeout:    45            # model query timeout
 # this model is the default for Model-A for score_answers.py
 #
 model:
-  name:         "test:test"
-  #name:         "argo:gpt4"
+  #name:         "test:test"
+  name:         "argo:gpt4"
   temperature:  0.7
   baseModel:   "None"
   Tokenizer:   "None"
