@@ -322,7 +322,7 @@ running as waiting for a model to load can take 10-15 minutes (see
 
 Get the list of running and queued models as follows:
    ```bash
-   access_token=$(python -m common/inference_auth_token get_access_token)
+   access_token=$(python -m common.inference_auth_token get_access_token)
    curl -X GET "https://data-portal-dev.cels.anl.gov/resource_server/sophia/jobs" \
        -H "Authorization: Bearer ${access_token}" | jq
    ```
@@ -332,7 +332,7 @@ Piping the output to ``jq`` (Command-line JSON processor) makes it much easier t
  - If you are not connected via VPN or to Argonne-auth at the lab then you'll get an error such as *curl: (6) Could not resolve host: data-portal-dev.cels.anl.gov*.
  - If it's been a while since you authenticated, you'll get a "Permission denied" error. In this case, you'll need to re-authenticate:
 ```
-python -m common/inference_auth_token authenticate --force
+python -m common.inference_auth_token authenticate --force
 ```
 
 If no models are running, then you'll need to invoke one (and wait 10-15 minutes) using 
