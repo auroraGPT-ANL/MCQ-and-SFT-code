@@ -341,7 +341,7 @@ class Model:
 
         elif self.model_type == 'Argo':
             # Direct POST using requests for Argo.
-            logger.info(f"Direct POST to Argo: {self.model_name} at {self.endpoint}")
+            #logger.info(f"Direct POST to Argo: {self.model_name} at {self.endpoint}")
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
