@@ -73,7 +73,7 @@ def process_directory(input_dir: str, output_dir: str = "output_files", use_prog
         return
 
     if use_progress_bar:
-        pbar = tqdm(total=total_files, desc="Processing PDFs", unit="file")
+        pbar = tqdm(total=total_files, desc=f"Processing {total_files} PDFs", unit="file")
     else:
         pbar = config.NoOpTqdm(total=total_files)
 
