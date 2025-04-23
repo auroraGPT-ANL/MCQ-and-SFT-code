@@ -28,7 +28,7 @@ from common import config
 from common.inference_auth_token import get_access_token
 from common.exceptions import APITimeoutError
 from common.alcf_inference_utilities import get_names_of_alcf_chat_models
-from test_model import TestModel  # local stub for offline testing
+from test.test_model import TestModel  # local stub for offline testing
 
 # ---------------------------------------------------------------------------
 # Local aliases for readability 
@@ -411,7 +411,6 @@ class Model:
                 logger.warning(f"Exception: {str(e)[:80]}...")
                 initiate_shutdown("Initiating shutdown.")
         elif self.model_type == 'Test':
-            logger.info(f"Running test model with prompt: {user_prompt[:50]}...")
             return self.test_model.generate_response(user_prompt, system_prompt)
         else:
             logger.warning(f"Unknown model type: {self.model_type}")
