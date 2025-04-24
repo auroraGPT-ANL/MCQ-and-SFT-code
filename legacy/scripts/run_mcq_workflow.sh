@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-set -e
+#set -e
 
 # Start timer
 start_time=$(date +%s)
@@ -7,6 +7,10 @@ start_time=$(date +%s)
 # Determine the project root (one level above this script)
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
+PROJECT_ROOT=$(dirname "$PROJECT_ROOT")
+
+#echo SCRIPT DIR $SCRIPT_DIR
+#echo PROJECT ROOT $PROJECT_ROOT
 
 # Ensure secrets.yml exists
 if [ ! -f "$PROJECT_ROOT/secrets.yml" ]; then
@@ -15,7 +19,7 @@ if [ ! -f "$PROJECT_ROOT/secrets.yml" ]; then
 argo:
     username: YOUR_ARGO_USERNAME
 EOF
-  exit 1
+  return
 fi
 
 # Temporarily drop into the repo root directory
@@ -35,7 +39,7 @@ while getopts "p:vn:" opt; do
     p) p_value="$OPTARG" ;;
     v) v_flag="-v" ;;
     n) n_value="$OPTARG" ;;
-    *) echo "Usage: $0 [-p value] [-v] [-n number]" && exit 1 ;;
+    *) echo "Usage: $0 [-p value] [-v] [-n number]" && return ;;
   esac
 done
 
