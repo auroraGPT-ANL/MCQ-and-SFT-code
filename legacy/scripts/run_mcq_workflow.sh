@@ -8,6 +8,16 @@ start_time=$(date +%s)
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
 
+# Ensure secrets.yml exists
+if [ ! -f "$PROJECT_ROOT/secrets.yml" ]; then
+  echo "Please create secrets.yml. If using argo models, populate with:"
+  cat << 'EOF'
+argo:
+    username: YOUR_ARGO_USERNAME
+EOF
+  exit 1
+fi
+
 # Temporarily drop into the repo root directory
 cd "$PROJECT_ROOT"
 
