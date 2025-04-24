@@ -180,7 +180,7 @@ class Model:
             with open("openai_access_token.txt", "r", encoding="utf-8") as fh:
                 self.key = fh.read().strip()
         except FileNotFoundError:
-            initiate_shutdown("Missing OpenAI access token.")
+            initiate_shutdown(f"Missing OpenAI access token. Provide in {os.getcwd()}/openai_access_token.txt")
         logger.info(f"OpenAI model: {self.model_name}")
 
     # "argo:<model>" - Argonne ARGO
