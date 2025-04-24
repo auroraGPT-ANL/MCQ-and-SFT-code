@@ -71,7 +71,7 @@ mkdir _PAPERS _JSON _MCQ _RESULTS
 3. **Set Up Conda Environment:**
 
 Important note: this install has been tested on MacOS (15.4) running on Apple M2 silicon. On 
-other platforms the specifics in *environment.yml* may need to be tweaked.
+oher platforms the specifics in *environment.yml* may need to be tweaked.
 
 Option 1: Update your existing Conda environment
 ```bash
@@ -93,7 +93,7 @@ To avoid having to do this every time you activate the conda env, add this to yo
 ```bash
 # set PYTHONPATH for MCQ pipeline at MCQ-and-SFT-code
 export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/YOUR_PATH/MCQ-and-SFT-code/src${PYTHONPATH:+:$PYTHONPATH}"
-```
+``
 
 Note- Make sure to update **YOUR**\_**PATH**.
 
@@ -130,7 +130,6 @@ Note that if you are using the ALCF inference endpoint service you might first c
 models are running, as it takes 10-15 minutes for a model to load.  This will cause any of the 
 codes below (generate\_mcqs.py, generate\_answers.py, score\_answers.py) to time out.
 
-
 ### Bundled MCQ Workflow Execution
 
 For a quick and comprehensive run of the entire
@@ -162,7 +161,11 @@ trouble with -p up to perhaps ~20.
 
 **Examples:**
 
-*(With CWD at the repo root, where _PAPERS, etc. reside)*
+The core steps of the workflow access models on external hosts.  You will need to 
+specify the models you will use in *config.yml*.  To learn more about specifying
+models, see **Models** below.
+
+**TO-DO: Set up a starter config with models that require the first time user to provide an API key (creating secrets.yml) to the model service, such as OpenAI, so that they do not have to stop here and learn all about models and configuration.**
 
 Run with default 8-way parallel, in verbose mode to see progress messages
 ```bash
@@ -285,25 +288,21 @@ to set up your ALCF authentication token, which is required to access models via
 
 Specifically:
 
-1. Download the script to manage access tokens:
+1. Authenticate with your Globus account:
 ```bash
-wget https://raw.githubusercontent.com/argonne-lcf/inference-endpoints/refs/heads/main/inference_auth_token.py
-```
-2. Authenticate with your Globus account:
-```bash
-python -m inference_auth_token authenticate
+python -m common.inference_auth_token authenticate
 ```
 The above command will generate an access token and a refresh token, and store them in your home directory. 
 
-3. Other Tips
+2. Other Tips
 
 If you need to re-authenticate from scratch in order to 1) change Globus account, or 2) resolve a `Permission denied from internal policies` error, first logout from your account by visiting [https://app.globus.org/logout](https://app.globus.org/logout), and type the following command:
 ```bash
-python -m inference_auth_token authenticate --force
+python -m common.inference_auth_token authenticate --force
 ```
 View your access token:
 ```bash
-python -m inference_auth_token get_access_token
+python -m common.inference_auth_token get_access_token
 ```
 If your current access token is expired, the above command will atomatically generate a new token without human intervention.
 
