@@ -172,7 +172,7 @@ class Model:
         logger.info(f"Cafe model: {self.model_name}")
 
     # "openai:<model>" - OpenAI
-    def _init_openai_model(self, model_name: str):
+    def _orig__init_openai_model(self, model_name: str):
         self.model_name = model_name.split("openai:")[1]
         self.model_type = "OpenAI"
         self.endpoint = OPENAI_EP
@@ -182,6 +182,29 @@ class Model:
         except FileNotFoundError:
             initiate_shutdown(f"Missing OpenAI access token. Provide in {os.getcwd()}/openai_access_token.txt")
         logger.info(f"OpenAI model: {self.model_name}")
+        # "openai:<model>" - OpenAI
+
+    def _init_openai_model(self, model_name: str):
+        self.model_name = model_name.split("openai:")[1]
+        self.model_type = "OpenAI"
+        self.endpoint = OPENAI_EP
+
+        # look first in secrets.yml; fall back to openai_access_token.txt and nudge the user to use secrets.yml
+        self.key = config.get_secret("openai.access_token")
+        if not self.key:
+            try:
+                with open("openai_access_token.txt", "r", encoding="utf-8") as fh:
+                    self.key = fh.read().strip()
+                logger.info(
+                    "OpenAI access token found in openai_access_token.txt - please move it to secrets.yml\n"
+                    "YAML format:\n"
+                    "openai:\n"
+                    "      access_token: YOUR_OPENAI_ACCESS_TOKEN"
+                )
+            except FileNotFoundError:
+                initiate_shutdown("Missing OpenAI access token.")
+        logger.info(f"OpenAI model: {self.model_name}")
+
 
     # "argo:<model>" - Argonne ARGO
     def _init_argo_model(self, model_name: str):
