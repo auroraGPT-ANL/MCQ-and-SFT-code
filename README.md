@@ -93,7 +93,7 @@ To avoid having to do this every time you activate the conda env, add this to yo
 ```bash
 # set PYTHONPATH for MCQ pipeline at MCQ-and-SFT-code
 export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/YOUR_PATH/MCQ-and-SFT-code/src${PYTHONPATH:+:$PYTHONPATH}"
-``
+```
 
 Note- Make sure to update **YOUR**\_**PATH**.
 
