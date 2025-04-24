@@ -18,20 +18,6 @@ timeout:    45            # model query timeout
 # the comment line.
 #
 # 
-  #name:        "cafe:meta-llama/Llama-3.3-70B-Instruct"
-  #name:        "cafe:llama31-405b-fp8"
-  #name:        "alcf:argonne-private/AuroraGPT-Tulu3-SFT-0125"
-  #name:        "alcf:argonne-private/AuroraGPT-IT-v4-0125"
-  #name:        "alcf:argonne-private/AuroraGPT-7B"
-  #name:        "alcf:meta-llama/Meta-Llama-3-70B-Instruct"
-  #name:        "pb:mistralai/Mistral-7B-Instruct-v0.3"
-  #name:        "openai:gpt-4"
-  #name:        "pb:argonne-private/Llama2-70B"
-  #name:        "local:qwen2.5-7b-instruct-1m"
-  #name:        "local:qwen2.5-7b-instruct-1m"
-  #name:        "local:deepseek-r1-distill-llama-8b"
-  #name:         "test:test"
-
 # this model is the default for Model-A for score_answers.py
 #
 model:
@@ -45,7 +31,7 @@ model:
 #         (note Temperature=0 is necessary)
 
 model_b:
-  name:        "argo:gpt4o"
+  name:        "alcf:meta-llama/Llama-3.3-70B-Instruct"
   temperature:   0.0
   baseModel:    "None"
   Tokenizer:    "None"
