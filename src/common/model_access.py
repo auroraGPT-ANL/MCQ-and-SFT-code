@@ -45,6 +45,7 @@ OPENAI_EP = "https://api.openai.com/v1"
 ARGO_EP = "https://apps.inside.anl.gov/argoapi/api/v1/resource/chat"
 
 
+
 class Model:
     """Unified interface for multiple chat/completions back‑ends."""
 
@@ -355,6 +356,7 @@ class Model:
                 "top_p": 0.9
             }
             url = self.endpoint if self.endpoint.endswith('/') else self.endpoint + '/'
+
             try:
                 resp = requests.post(url, headers=self.headers, data=json.dumps(params))
                 resp.raise_for_status()
