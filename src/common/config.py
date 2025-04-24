@@ -153,6 +153,15 @@ argo_user = get_secret("argo.username")
 if not argo_user:
     logger.warning("Argo username not found in secrets file.")
 
+# convenience for OpenAI
+openai_access_token = get_secret("openai.access_token")
+if not openai_access_token:
+    logger.warning(
+        "OpenAI access token not found in secrets file; "
+        "will fall back to openai_access_token.txt"
+    )
+
+
 # ---------------------------------------------------------------------------
 #  Unpack frequently‑used config fields
 # ---------------------------------------------------------------------------
