@@ -322,8 +322,8 @@ class Model:
                 message = response_json['choices'][0]['message']['content']
                 return message
             except Exception as e:
-                logger.warning(f"Exception: {str(e)[:80]}...")
-                initiate_shutdown("Initiating shutdown.")
+                logger.error(f"Exception: {str(e)[:80]}...")
+                initiate_shutdown("Model invocation failed. Exiting.")
 
         elif self.model_type in ['OpenAI', 'ALCF']:
             #logger.info(f"Initializing {self.model_type} client with model {self.model_name} and endpoint: {self.endpoint}")
@@ -433,13 +433,13 @@ class Model:
                 logger.info(f"Response message: {message}")
                 return message
             except Exception as e:
-                logger.warning(f"Exception: {str(e)[:80]}...")
-                initiate_shutdown("Initiating shutdown.")
+                logger.error(f"Exception: {str(e)[:80]}...")
+                initiate_shutdown("Error invoking cafe type model. Exiting.")
         elif self.model_type == 'Test':
             return self.test_model.generate_response(user_prompt, system_prompt)
         else:
-            logger.warning(f"Unknown model type: {self.model_type}")
-            initiate_shutdown("Initiating shutdown.")
+            logger.error(f"Unknown model type: {self.model_type}.")
+            initiate_shutdown ("Unknown model type. Exiting.")
 
     # -----------------------------------------------------------------------
     #  HuggingFace

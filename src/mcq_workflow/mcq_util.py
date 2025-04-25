@@ -141,7 +141,7 @@ def update_shared_counters(is_success: bool, shared_counters: dict, counter_lock
                 config.logger.error(
                     f"Success rate <50% ({shared_counters['success']}/{total}). Run with -v to investigate."
                 )
-                config.initiate_shutdown("Initiating shutdown.")
+                config.initiate_shutdown("Failure rate >50%. Exiting.")
 
 
 def attempt_parse_json(s: str) -> dict:
