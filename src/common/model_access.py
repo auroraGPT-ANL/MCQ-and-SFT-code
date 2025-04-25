@@ -41,8 +41,9 @@ argo_user = config.argo_user
 # ---------------------------------------------------------------------------
 # Constants 
 # ---------------------------------------------------------------------------
-OPENAI_EP = "https://api.openai.com/v1"
-ARGO_EP = "https://apps.inside.anl.gov/argoapi/api/v1/resource/chat"
+OPENAI_EP =   "https://api.openai.com/v1"
+ARGO_EP =     "https://apps.inside.anl.gov/argoapi/api/v1/resource/chat"
+ARGO_DEV_EP = "https://apps-dev.inside.anl.gov/argoapi/api/v1/resource/chat"
 
 
 
@@ -94,7 +95,7 @@ class Model:
         elif model_name.startswith("openai:"):
             self._init_openai_model(model_name)
 
-        elif model_name.startswith("argo:"):
+        elif model_name.startswith("argo:") or model_name.startswith("argo-dev:"):
             self._init_argo_model(model_name)
 
         elif model_name.startswith("test:"):
@@ -208,9 +209,12 @@ class Model:
 
     # "argo:<model>" - Argonne ARGO
     def _init_argo_model(self, model_name: str):
-        self.model_name = model_name.split("argo:")[1]
+        # Split off prefix and identify if its dev or standard argo
+        prefix, model = model_name.split(":")
+        self.model_name = model
         self.model_type = "Argo"
-        self.endpoint = ARGO_EP
+        # Select endpoint based on prefix
+        self.endpoint = ARGO_DEV_EP if prefix == "argo-dev" else ARGO_EP
         self.argo_user = argo_user or config.get_secret("argo.username")
         if not self.argo_user:
             initiate_shutdown("Argo username not found in secrets.yml.")
