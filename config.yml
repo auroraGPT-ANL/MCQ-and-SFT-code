@@ -12,6 +12,11 @@ directories:
 #
 timeout:    45            # model query timeout
 
+model_type_endpoints:
+  openai: "https://api.openai.com/v1"
+  argo: "https://apps.inside.anl.gov/argoapi/api/v1/resource/chat"
+  argo_dev: "https://apps-dev.inside.anl.gov/argoapi/api/v1/resource/chat"
+
 # Model 
 # temperature, base model, tokenizer applied to whatever model is specified
 # on the command line. Model name below is used if no model is specified on 
@@ -21,7 +26,7 @@ timeout:    45            # model query timeout
 # this model is the default for Model-A for score_answers.py
 #
 model:
-  name:        "openai:gpt-4"
+  name:        "openai:gpt4"
  #name:        "argo:gpt4large"
   temperature:  0.7  
   baseModel:   "None"

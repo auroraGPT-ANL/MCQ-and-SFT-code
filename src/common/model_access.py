@@ -41,10 +41,6 @@ argo_user = config.argo_user
 # ---------------------------------------------------------------------------
 # Constants 
 # ---------------------------------------------------------------------------
-OPENAI_EP =   "https://api.openai.com/v1"
-ARGO_EP =     "https://apps.inside.anl.gov/argoapi/api/v1/resource/chat"
-ARGO_DEV_EP = "https://apps-dev.inside.anl.gov/argoapi/api/v1/resource/chat"
-
 
 
 class Model:
@@ -188,7 +184,7 @@ class Model:
     def _init_openai_model(self, model_name: str):
         self.model_name = model_name.split("openai:")[1]
         self.model_type = "OpenAI"
-        self.endpoint = OPENAI_EP
+        self.endpoint = config.model_type_endpoints['openai']
 
         # look first in secrets.yml; fall back to openai_access_token.txt and nudge the user to use secrets.yml
         self.key = config.get_secret("openai.access_token")
@@ -214,7 +210,7 @@ class Model:
         self.model_name = model
         self.model_type = "Argo"
         # Select endpoint based on prefix
-        self.endpoint = ARGO_DEV_EP if prefix == "argo-dev" else ARGO_EP
+        self.endpoint = config.model_type_endpoints['argo_dev'] if prefix == "argo-dev" else config.model_type_endpoints['argo']
         self.argo_user = argo_user or config.get_secret("argo.username")
         if not self.argo_user:
             initiate_shutdown("Argo username not found in secrets.yml.")

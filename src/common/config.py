@@ -170,6 +170,9 @@ if not openai_access_token:
 # ---------------------------------------------------------------------------
 
 # Models
+# Model endpoints
+model_type_endpoints = _CONFIG.get("model_type_endpoints", {})
+
 model   = _CONFIG.get("model", {})
 model_b = _CONFIG.get("model_b", {})
 model_c = _CONFIG.get("model_c", {})
