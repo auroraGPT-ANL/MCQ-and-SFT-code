@@ -114,11 +114,14 @@ def load_config(path: str | None = None) -> dict[str, Any]:
 def load_secrets(cfg: dict[str, Any]) -> dict[str, Any]:
     """Load the secrets file referred to in *config.yml* (returns empty dict if absent)."""
     rel_path = cfg.get("argo", {}).get("username_file")
+    #print('REL', rel_path)
     if not rel_path:
         logger.warning("No secrets file specified in config.yml")
         return {}
     secrets_path = rel_path if os.path.isabs(rel_path) else os.path.join(REPO_ROOT, rel_path)
+    #print('SP', secrets_path)
     if not os.path.exists(secrets_path):
+        #print(f"Secrets file '{secrets_path}' not found")
         logger.warning(f"Secrets file '{secrets_path}' not found")
         return {}
     try:
