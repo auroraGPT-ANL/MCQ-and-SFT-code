@@ -1,6 +1,15 @@
 #!/usr/bin/env zsh
 #set -e
 
+# Handle CLI options when script is sourced
+if [[ $ZSH_EVAL_CONTEXT =~ :file$ ]]; then
+  # Script is being sourced
+  if [[ $# -gt 0 ]]; then
+    # Set positional parameters to the arguments passed to source
+    set -- "$@"
+  fi
+fi
+
 # Start timer
 start_time=$(date +%s)
 
@@ -29,6 +38,11 @@ cd "$PROJECT_ROOT"
 export PYTHONPATH="$PROJECT_ROOT/src:${PYTHONPATH:-}"
 
 # Default value for parameter p (number of threads for generate_mcqs.py, generate_answers.py, and score_answers.py)
+
+# Reset OPTIND to ensure proper option processing when script is sourced
+OPTIND=1
+
+# Initialize variables
 p_value=8
 v_flag=""
 n_value=""
@@ -59,6 +73,16 @@ if (( ${#MODELS[@]} > 0 )); then
   for (( i=2; i<=${#MODELS[@]}; i++ )); do
     echo "  ${ALIASES[i]}: ${MODELS[i]}"
   done
+fi
+
+# Display active options
+echo "Options:"
+echo "  -p $p_value"
+if [ -n "$v_flag" ]; then
+  echo "  -v"
+fi
+if [ -n "$n_value" ]; then
+  echo "  -n $n_value"
 fi
 
 echo "Step 1: Convert PDF to JSON ($(date))."
