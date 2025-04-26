@@ -365,16 +365,19 @@ class Model:
                     return ""
             except Exception as e:
                 error_str = str(e)
-                if "401" in error_str or "Unauthorized" in error_str:
-                    logger.error(f"{self.model_type} authentication failed: {error_str[:80]}...")
-                    initiate_shutdown("Model API Authentication failed. Exiting.")
-                elif "404" in error_str:
-                    logger.error(f"{self.model_type} model not found: {error_str[:80]}...")
-                    initiate_shutdown(f"{self.model_type} model not found. Exiting.")
-                elif any(str(code) in error_str for code in range(400, 500)):
-                    logger.error(f"{self.model_type} API error: {error_str[:80]}...")
-                    initiate_shutdown(f"{self.model_type} API error. Exiting.")
-                logger.warning(f"{self.model_type} request error: {error_str[:80]}...")
+                with error_lock:
+                    if not config.shutdown_event.is_set():
+                        if "401" in error_str or "Unauthorized" in error_str:
+                            logger.error(f"{self.model_type} authentication failed: {error_str[:80]}...")
+                            initiate_shutdown("Model API Authentication failed. Exiting.")
+                        elif "404" in error_str:
+                            logger.error(f"{self.model_type} model not found: {error_str[:80]}...")
+                            initiate_shutdown(f"{self.model_type} model not found. Exiting.")
+                        elif any(str(code) in error_str for code in range(400, 500)):
+                            logger.error(f"{self.model_type} API error: {error_str[:80]}...")
+                            initiate_shutdown(f"{self.model_type} API error. Exiting.")
+                        else:
+                            logger.warning(f"{self.model_type} request error: {error_str[:80]}...")
                 return ""
 
         elif self.model_type == 'Argo':
