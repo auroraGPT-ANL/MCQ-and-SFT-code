@@ -35,8 +35,8 @@ def generate_mcqs_dir(input_dir: str,
     Returns:
       The path to the directory where MCQs were written.
     """
-    # Configure verbosity (quiet = not verbose)
-    dummy_args = SimpleNamespace(verbose=verbose, quiet=not verbose)
+    # Configure verbosity (only set verbose or quiet, not both)
+    dummy_args = SimpleNamespace(verbose=verbose, quiet=False)
     use_progress_bar = config.configure_verbosity(dummy_args)
 
     # Initialize and display model details
