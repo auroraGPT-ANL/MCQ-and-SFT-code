@@ -26,7 +26,7 @@ model_type_endpoints:
 # this model is the default for Model-A for score_answers.py
 #
 model:
-  name:        "openai:gpt4"
+  name:        "openai:gpt-4"
  #name:        "argo:gpt4large"
   temperature:  0.7  
   baseModel:   "None"
@@ -37,7 +37,8 @@ model:
 #         (note Temperature=0 is necessary)
 
 model_b:
-  name:         "argo:gpt4"
+  name:         "openai:gpt-4"
+  #name:         "argo:gpt4"
   temperature:   0.0
   baseModel:    "None"
   Tokenizer:    "None"
