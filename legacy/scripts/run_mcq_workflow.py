@@ -1,3 +1,12 @@
+#!/usr/bin/env python
+
+""" run_mcq_workflow
+Python version of MCQ workflow, avoiding an overly complex .sh script
+(with the peculiarities of bash vs zsh and sourcing vs. executing).
+All models are specified in config.yml (at the root of the repo).
+Usernames and tokens are kept in secrets.yml (also at root).
+"""
+
 import os
 import sys
 import subprocess
