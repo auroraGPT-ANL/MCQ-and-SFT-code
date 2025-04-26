@@ -173,6 +173,15 @@ if not openai_access_token:
 # Model endpoints
 model_type_endpoints = _CONFIG.get("model_type_endpoints", {})
 
+# HTTP client settings
+http_client = _CONFIG.get("http_client", {
+    "connect_timeout": 3.05,
+    "read_timeout": 10,
+    "max_retries": 1,
+    "pool_connections": 1,
+    "pool_maxsize": 1
+})
+
 model   = _CONFIG.get("model", {})
 model_b = _CONFIG.get("model_b", {})
 model_c = _CONFIG.get("model_c", {})

@@ -16,6 +16,7 @@ import subprocess
 import sys
 import time
 from typing import Any
+import threading
 
 import requests
 from huggingface_hub import login
@@ -37,6 +38,9 @@ logger = config.logger
 timeout = config.timeout
 initiate_shutdown = config.initiate_shutdown
 argo_user = config.argo_user
+
+# Thread safety for error reporting
+error_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Constants 
@@ -318,6 +322,9 @@ class Model:
             try:
                 #logger.info(f'Running {self.endpoint} ')
                 resp = requests.post(self.endpoint, headers=self.headers, data=json.dumps(data))
+                if resp.status_code >= 400 and resp.status_code < 500:
+                    logger.error(f"Model API error {resp.status_code}: {resp.text}")
+                    initiate_shutdown(f"Model API error {resp.status_code}. Exiting.")
                 response_json = resp.json()
                 message = response_json['choices'][0]['message']['content']
                 return message
@@ -357,10 +364,17 @@ class Model:
                     logger.warning(f"{self.model_type} request timed out after {timeout} seconds: {str(e)[:80]}...")
                     return ""
             except Exception as e:
-                if "401" in str(e) or "Unauthorized" in str(e):
-                    logger.error(f"{self.model_type} authentication failed: {str(e)[:80]}...")
+                error_str = str(e)
+                if "401" in error_str or "Unauthorized" in error_str:
+                    logger.error(f"{self.model_type} authentication failed: {error_str[:80]}...")
                     initiate_shutdown("Model API Authentication failed. Exiting.")
-                logger.warning(f"{self.model_type} request error: {str(e)[:80]}...")
+                elif "404" in error_str:
+                    logger.error(f"{self.model_type} model not found: {error_str[:80]}...")
+                    initiate_shutdown(f"{self.model_type} model not found. Exiting.")
+                elif any(str(code) in error_str for code in range(400, 500)):
+                    logger.error(f"{self.model_type} API error: {error_str[:80]}...")
+                    initiate_shutdown(f"{self.model_type} API error. Exiting.")
+                logger.warning(f"{self.model_type} request error: {error_str[:80]}...")
                 return ""
 
         elif self.model_type == 'Argo':
@@ -381,7 +395,31 @@ class Model:
             url = self.endpoint if self.endpoint.endswith('/') else self.endpoint + '/'
 
             try:
-                resp = requests.post(url, headers=self.headers, data=json.dumps(params))
+                if config.shutdown_event.is_set():
+                    return ""
+                    
+                # Create a session with custom retry settings from config
+                session = requests.Session()
+                adapter = requests.adapters.HTTPAdapter(
+                    max_retries=config.http_client.get("max_retries", 1),
+                    pool_connections=config.http_client.get("pool_connections", 1),
+                    pool_maxsize=config.http_client.get("pool_maxsize", 1)
+                )
+                session.mount('http://', adapter)
+                session.mount('https://', adapter)
+                
+                # Make request with timeouts from config
+                connect_timeout = config.http_client.get("connect_timeout", 3.05)
+                read_timeout = config.http_client.get("read_timeout", 10)
+                resp = session.post(
+                    url,
+                    headers=self.headers,
+                    data=json.dumps(params),
+                    timeout=(connect_timeout, read_timeout)
+                )
+                if resp.status_code >= 400 and resp.status_code < 500:
+                    logger.error(f"Model API error {resp.status_code}: {resp.text}")
+                    initiate_shutdown(f"Model API error {resp.status_code}. Exiting.")
                 resp.raise_for_status()
                 response_json = resp.json()
                 if "choices" in response_json:
@@ -406,8 +444,17 @@ class Model:
                 else:
                     logger.warning(f"Argo response does not contain 'choices' or 'response': {response_json}")
                     return str(response_json)
+            except requests.exceptions.ConnectionError as e:
+                with error_lock:
+                    if not config.shutdown_event.is_set():
+                        logger.error(f"Failed to connect to Argo service: {str(e)[:80]}...")
+                        initiate_shutdown("Argo service unreachable. Exiting.")
+                return ""
             except Exception as e:
-                logger.warning(f"Argo direct POST request error: {str(e)[:80]}")
+                with error_lock:
+                    if not config.shutdown_event.is_set():
+                        logger.error(f"Argo request error: {str(e)[:80]}...")
+                        initiate_shutdown("Argo request failed. Exiting.")
                 return ""
 
         elif self.model_type == 'CAFE':
@@ -426,6 +473,9 @@ class Model:
                     f'  Data = {json.dumps(data)}'
                 )
                 resp = requests.post(self.endpoint, headers=self.headers, data=json.dumps(data))
+                if resp.status_code >= 400 and resp.status_code < 500:
+                    logger.error(f"Model API error {resp.status_code}: {resp.text}")
+                    initiate_shutdown(f"Model API error {resp.status_code}. Exiting.")
                 logger.info(f"Raw response: {resp}")
                 response_json = resp.json()
                 logger.info(f"Parsed JSON: {response_json}")

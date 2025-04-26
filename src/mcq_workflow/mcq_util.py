@@ -171,6 +171,8 @@ def robust_parse_json_output(response_text: str, model) -> dict:
     try:
         return attempt_parse_json(cleaned)
     except Exception as e:
+        if config.shutdown_event.is_set():
+            raise ValueError("Shutdown in progress")
         try:
             with open("json_error_log.txt", "a", encoding="utf-8") as error_file:
                 error_file.write(f"Initial JSON parsing error: {e}\nResponse: {response_text}\n\n")
@@ -223,6 +225,8 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
     try:
         step1_msg = config.user_message.format(chunk=chunk)
         step1_output = model.run(user_prompt=step1_msg, system_prompt=config.system_message)
+        if config.shutdown_event.is_set():  # Check after model.run
+            return (filename, linenum, chunknum, None, False)
         augmented_chunk = step1_output
         # If the response contains "augmented_chunk:", split it.
         if "augmented_chunk:" in str(step1_output).lower():
@@ -245,6 +249,8 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
     try:
         step2_msg = config.user_message_2.format(augmented_chunk=augmented_chunk)
         generated_question = model.run(user_prompt=step2_msg, system_prompt=config.system_message_2)
+        if config.shutdown_event.is_set():  # Check after model.run
+            return (filename, linenum, chunknum, None, False)
     except Exception as e:
         if config.shutdown_event.is_set():
             config.logger.info("Shutdown in progress; suppressing error details.")
@@ -261,6 +267,8 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
             generated_question=generated_question
         )
         step3_output = model.run(user_prompt=step3_msg, system_prompt=config.system_message_3)
+        if config.shutdown_event.is_set():  # Check after model.run
+            return (filename, linenum, chunknum, None, False)
         if step3_output is None:
             raise ValueError("model.run() returned None for step3_output.")
         step3_clean = step3_output.replace("```json", "").replace("```", "").strip()
@@ -415,10 +423,15 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
                     if config.shutdown_event.is_set():
                         config.logger.info("Shutdown in progress: stopping new tasks (chunk loop).")
                         break
+                    # Only submit new task if shutdown hasn't been triggered
                     futures.append(executor.submit(process_chunk, model, filename, rec_path,
                                                     linenum, chunknum, chunk,
                                                     pbar_total, pbar_success,
                                                     shared_counters, counter_lock))
+                    # Check immediately after submitting if shutdown was triggered
+                    if config.shutdown_event.is_set():
+                        config.logger.info("Shutdown triggered: stopping further task submission.")
+                        break
         processed_chunks = {}  # filename -> set of (linenum, chunknum)
         for future in futures:
             try:

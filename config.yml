@@ -12,6 +12,14 @@ directories:
 #
 timeout:    45            # model query timeout
 
+# HTTP client settings
+http_client:
+  connect_timeout: 3.05    # connection timeout in seconds
+  read_timeout: 10         # read timeout in seconds
+  max_retries: 1           # maximum number of retries for HTTP requests
+  pool_connections: 1      # connection pool size
+  pool_maxsize: 1          # maximum pool size
+
 model_type_endpoints:
   openai: "https://api.openai.com/v1"
   argo: "https://apps.inside.anl.gov/argoapi/api/v1/resource/chat"
@@ -26,8 +34,8 @@ model_type_endpoints:
 # this model is the default for Model-A for score_answers.py
 #
 model:
-  name:        "openai:gpt-4"
- #name:        "argo:gpt4large"
+ # name:        "openai:gpt-4"
+  name:        "argo:gpt4large"
   temperature:  0.7  
   baseModel:   "None"
   Tokenizer:   "None"
