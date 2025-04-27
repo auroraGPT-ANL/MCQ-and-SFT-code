@@ -40,7 +40,8 @@ def generate_mcqs_dir(input_dir: str,
     use_progress_bar = config.configure_verbosity(dummy_args)
 
     # Initialize and display model details
-    model = Model(model_name)
+    model = Model(model_name, parallel_workers=parallel_workers)
+
     model.details()
 
     # Ensure output directory exists
@@ -100,7 +101,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--force',
         action='store_true',
-        help='Force reprocessing even if output files exist.'
+        help='Force reprocessing files to generate (and append) MCQs even if output files exist.'
     )
 
     args = parser.parse_args()
