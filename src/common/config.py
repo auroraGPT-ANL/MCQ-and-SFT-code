@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import signal
 import threading
 import logging
@@ -50,7 +51,8 @@ def _handle_sigint(signum, frame):  # noqa: D401, unused‑arg
 def initiate_shutdown(message: str = "Shutting down.") -> None:
     logger.error(message)
     shutdown_event.set()
-    raise SystemExit(message)
+    #raise SystemExit(message) # this line plus logger.error above double- reports - substituting with:
+    sys.exit(1)
 
 
 signal.signal(signal.SIGINT, _handle_sigint)
