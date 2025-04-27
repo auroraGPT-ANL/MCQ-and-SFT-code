@@ -52,7 +52,6 @@ def main():
     n_value = args.n
 
     # Step 0: list models
-    print("Listing models...")
     result = subprocess.run(
         f"python -m common.list_models -p {p_value}",
         shell=True, capture_output=True, text=True, check=True
