@@ -60,8 +60,9 @@ class Model:
 
     # Core Methods
     # -----------------------------------------------------------------------
-    def __init__(self, model_name: str):
-        self.model_name = model_name  # may be rewritten below
+    def __init__(self, model_name: str, parallel_workers: int = None):
+        self.model_name = model_name
+        self.parallel_workers = parallel_workers
         self.base_model: Any | None = None
         self.tokenizer: Any | None = None
         self.temperature = 0.7
@@ -334,8 +335,12 @@ class Model:
     def _get_error_threshold(self) -> int:
         """Get error threshold based on number of worker threads"""
         try:
-            # n+1 where n is number of threads, default to 5 if not set
-            workers = getattr(config, 'parallel_workers', 4)
+            # n+1 where n is number of threads, default to n=4 if not set
+            workers = (
+                self.parallel_workers
+                if self.parallel_workers is not None
+                else getattr(config, 'parallel_workers', 4)
+            )
             return workers + 1
         except AttributeError:
             return 5  # reasonable default if parallel_workers not set
