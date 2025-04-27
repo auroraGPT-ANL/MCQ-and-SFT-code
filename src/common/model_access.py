@@ -48,109 +48,18 @@ error_lock = threading.Lock()
 
 
 class Model:
-    # -----------------------------------------------------------------------
-    #  Shared Helper Methods for API Handling
-    # -----------------------------------------------------------------------
-    def _handle_api_error(self, error: Exception, context: str = "") -> str:
-        """Thread-safe handling of API errors with proper shutdown."""
-        error_str = str(error)
-        with error_lock:
-            if not config.shutdown_event.is_set():
-                if "401" in error_str or "Unauthorized" in error_str:
-                    logger.error(f"{self.model_type} authentication failed: {error_str[:80]}...")
-                    initiate_shutdown("Model API Authentication failed. Exiting.")
-                elif "404" in error_str:
-                    logger.error(f"{self.model_type} model not found: {error_str[:80]}...")
-                    initiate_shutdown(f"{self.model_type} model not found. Exiting.")
-                elif any(str(code) in error_str for code in range(400, 500)):
-                    logger.error(f"{self.model_type} API error: {error_str[:80]}...")
-                    initiate_shutdown(f"{self.model_type} API error. Exiting.")
-                else:
-                    logger.warning(f"{self.model_type} request error{context}: {error_str[:80]}...")
-        return ""
-
-    def _create_http_session(self) -> requests.Session:
-        """Create an HTTP session with configured retry and timeout settings."""
-        if config.shutdown_event.is_set():
-            return None
-            
-        session = requests.Session()
-        adapter = requests.adapters.HTTPAdapter(
-            max_retries=config.http_client.get("max_retries", 1),
-            pool_connections=config.http_client.get("pool_connections", 1),
-            pool_maxsize=config.http_client.get("pool_maxsize", 1)
-        )
-        session.mount('http://', adapter)
-        session.mount('https://', adapter)
-        return session
-
-    def _make_api_request(self, url: str, data: dict) -> requests.Response:
-        """Make an API request with proper error handling and timeout settings."""
-        if config.shutdown_event.is_set():
-            return None
-
-        session = self._create_http_session()
-        if not session:
-            return None
-
-        connect_timeout = config.http_client.get("connect_timeout", 3.05)
-        read_timeout = config.http_client.get("read_timeout", 10)
-        
-        try:
-            resp = session.post(
-                url,
-                headers=self.headers,
-                data=json.dumps(data),
-                timeout=(connect_timeout, read_timeout)
-            )
-            if resp.status_code >= 400 and resp.status_code < 500:
-                with error_lock:
-                    if not config.shutdown_event.is_set():
-                        logger.error(f"Model API error {resp.status_code}: {resp.text}")
-                        initiate_shutdown(f"Model API error {resp.status_code}. Exiting.")
-                return None
-            resp.raise_for_status()
-            return resp
-        except requests.exceptions.ConnectionError as e:
-            self._handle_api_error(e, " (connection failed)")
-            return None
-        except Exception as e:
-            self._handle_api_error(e)
-            return None
-
-    def _format_chat_request(self, user_prompt: str, system_prompt: str, temperature: float) -> dict:
-        """Format a standard chat request payload."""
-        return {
-            "model": self.model_name,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            "temperature": temperature
-        }
-
-    def _extract_response_content(self, response_json: dict) -> str:
-        """Extract the generated text from a response in a standard way."""
-        if "choices" in response_json:
-            return response_json['choices'][0]['message']['content'].strip()
-        elif "response" in response_json:
-            return self._parse_argo_response(response_json["response"])
-        return str(response_json)
-
-    def _parse_argo_response(self, response_text: str) -> str:
-        """Parse Argo-specific response format."""
-        if response_text.startswith("```json"):
-            response_text = response_text[len("```json"):].strip()
-            if response_text.endswith("```"):
-                response_text = response_text[:-3].strip()
-            try:
-                parsed = json.loads(response_text)
-                return parsed.get("answer", str(parsed)).strip()
-            except Exception as parse_error:
-                logger.warning(f"Failed to parse JSON from Argo response: {parse_error}")
-        return response_text
     """Unified interface for multiple chat/completions back‑ends."""
+    
+    # Class-level error tracking
+    _api_error_counts = {
+        'OpenAI': 0,
+        'Argo': 0,
+        'CAFE': 0
+    }
+    _error_count_lock = threading.Lock()  # Lock for thread-safe counter updates
 
+    # Core Methods
+    # -----------------------------------------------------------------------
     def __init__(self, model_name: str):
         self.model_name = model_name  # may be rewritten below
         self.base_model: Any | None = None
@@ -209,8 +118,6 @@ class Model:
     # -----------------------------------------------------------------------
     #  Initialiser helpers 
     # -----------------------------------------------------------------------
-    
-    # "pb:<model>" - PBS submission
     def _init_pbs_model(self, model_name: str):
         self.model_name = model_name.split("pb:")[1]
         self.model_type = "HuggingfacePBS"
@@ -274,18 +181,6 @@ class Model:
         logger.info(f"Cafe model: {self.model_name}")
 
     # "openai:<model>" - OpenAI
-    def _orig__init_openai_model(self, model_name: str):
-        self.model_name = model_name.split("openai:")[1]
-        self.model_type = "OpenAI"
-        self.endpoint = OPENAI_EP
-        try:
-            with open("openai_access_token.txt", "r", encoding="utf-8") as fh:
-                self.key = fh.read().strip()
-        except FileNotFoundError:
-            initiate_shutdown(f"Missing OpenAI access token. Provide in {os.getcwd()}/openai_access_token.txt")
-        logger.info(f"OpenAI model: {self.model_name}")
-        # "openai:<model>" - OpenAI
-
     def _init_openai_model(self, model_name: str):
         self.model_name = model_name.split("openai:")[1]
         self.model_type = "OpenAI"
@@ -358,13 +253,12 @@ class Model:
             try:
                 self.client_socket.connect((self.compute_node, 50007))
                 break
-            except:
-                time.sleep(5)
-                logger.warning(f"Trying connection again {count}")
-
-    # -----------------------------------------------------------------------
-    #  General methods 
-    # -----------------------------------------------------------------------
+            except Exception as e:
+                if count < 9:  # Don't sleep on last attempt
+                    time.sleep(5)
+                    logger.warning(f"Trying connection again {count}")
+                else:
+                    return self._handle_api_error(e, " (connection failed)")
     def details(self):
         """
         Print basic info about the model to the logs.
@@ -412,107 +306,197 @@ class Model:
             return response
 
         elif self.model_type == 'vLLM':
-            data = self._format_chat_request(user_prompt, system_prompt, temperature)
-            resp = self._make_api_request(self.endpoint, data)
-            if resp is None:
-                return ""
-                
-            try:
-                return self._extract_response_content(resp.json())
-            except Exception as e:
-                logger.error(f"Exception: {str(e)[:80]}...")
-                initiate_shutdown("Model invocation failed. Exiting.")
+            return self._handle_api_model_request(user_prompt, system_prompt, temperature)
 
         elif self.model_type in ['OpenAI', 'ALCF']:
-            #logger.info(f"Initializing {self.model_type} client with model {self.model_name} and endpoint: {self.endpoint}")
-            try:
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ]
-                params = {
-                    "model": self.model_name,
-                    "messages": messages,
-                    "temperature": temperature
-                }
-                client = OpenAI(
-                    api_key=self.key,
-                    base_url=self.endpoint,
-                    timeout=timeout,
-                    max_retries=1
-                )
-                #logger.info(f"Sending request to {self.model_type} endpoint...")
-                #logger.info(f"Request details: model={self.model_name}, temperature={temperature}")
-                try:
-                    response = client.chat.completions.create(**params)
-                    #logger.info("Response received from API")
-                    generated_text = response.choices[0].message.content.strip()
-                    return generated_text
-                except Timeout:
-                    logger.warning(f"{self.model_type} request timed out after {timeout} seconds")
-                    return ""
-                except APITimeoutError as e:
-                    logger.warning(f"{self.model_type} request timed out after {timeout} seconds: {str(e)[:80]}...")
-                    return ""
-            except Exception as e:
-                return self._handle_api_error(e)
+            return self._handle_openai_request(user_prompt, system_prompt, temperature)
 
         elif self.model_type == 'Argo':
-            # Direct POST using requests for Argo.
-            url = self.endpoint if self.endpoint.endswith('/') else self.endpoint + '/'
-            data = self._format_chat_request(user_prompt, system_prompt, temperature)
-            data.update({
+            extra_data = {
                 "user": self.argo_user,
                 "stop": [],
                 "top_p": 0.9
-            })
-            
-            resp = self._make_api_request(url, data)
-            if resp is None:
-                return ""
-                
-            try:
-                return self._extract_response_content(resp.json())
-            except Exception as e:
-                return self._handle_api_
+            }
+            return self._handle_api_model_request(user_prompt, system_prompt, temperature, extra_data)
 
         elif self.model_type == 'CAFE':
-            data = {
-                "model": self.model_name,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "temperature": temperature
-            }
-            try:
-                logger.info(
-                    f'Running {self.endpoint}\n'
-                    f'  Headers = {self.headers}\n'
-                    f'  Data = {json.dumps(data)}'
-                )
-                resp = requests.post(self.endpoint, headers=self.headers, data=json.dumps(data))
-                if resp.status_code >= 400 and resp.status_code < 500:
-                    logger.error(f"Model API error {resp.status_code}: {resp.text}")
-                    initiate_shutdown(f"Model API error {resp.status_code}. Exiting.")
-                logger.info(f"Raw response: {resp}")
-                response_json = resp.json()
-                logger.info(f"Parsed JSON: {response_json}")
-                message = response_json['choices'][0]['message']['content']
-                logger.info(f"Response message: {message}")
-                return message
-            except Exception as e:
-                logger.error(f"Exception: {str(e)[:80]}...")
-                initiate_shutdown("Error invoking cafe type model. Exiting.")
+            return self._handle_api_model_request(user_prompt, system_prompt, temperature)
+
         elif self.model_type == 'Test':
             return self.test_model.generate_response(user_prompt, system_prompt)
+
         else:
             logger.error(f"Unknown model type: {self.model_type}.")
-            initiate_shutdown ("Unknown model type. Exiting.")
+            initiate_shutdown("Unknown model type. Exiting.")
 
+    # Error Handling Methods
     # -----------------------------------------------------------------------
-    #  HuggingFace
+    def _get_error_threshold(self) -> int:
+        """Get error threshold based on number of worker threads"""
+        try:
+            # n+1 where n is number of threads, default to 5 if not set
+            workers = getattr(config, 'parallel_workers', 4)
+            return workers + 1
+        except AttributeError:
+            return 5  # reasonable default if parallel_workers not set
+
+    def _reset_api_error_count(self):
+        """Reset error count after successful API call."""
+        with self._error_count_lock:
+            if self.model_type in self._api_error_counts:
+                self._api_error_counts[self.model_type] = 0
+
+    def _increment_api_error_count(self) -> bool:
+        """
+        Increment the error count for this model type.
+        Returns True if we've hit the threshold (n+1 errors before first success).
+        """
+        with self._error_count_lock:
+            if self.model_type not in self._api_error_counts:
+                return True  # Non-tracked model types exit immediately
+            
+            self._api_error_counts[self.model_type] += 1
+            threshold = self._get_error_threshold()
+            current = self._api_error_counts[self.model_type]
+            logger.debug(f"Error count for {self.model_type}: {current}/{threshold}")
+            return current >= threshold
+
+    def _handle_api_error(self, error: Exception, context: str = "") -> str:
+        """Thread-safe handling of API errors."""
+        error_str = str(error)
+        with error_lock:
+            if not config.shutdown_event.is_set():
+                # Auth failures always exit immediately
+                if "401" in error_str or "Unauthorized" in error_str:
+                    logger.error(f"{self.model_type} authentication failed: {error_str[:80]}...")
+                    initiate_shutdown("Model API Authentication failed. Exiting.")
+                # For API errors (4xx), only show error and exit if we hit threshold
+                elif "404" in error_str or any(str(code) in error_str for code in range(400, 500)):
+                    if self._increment_api_error_count():
+                        logger.error(f"{self.model_type} API error threshold reached: {error_str[:80]}...")
+                        initiate_shutdown(f"{self.model_type} API errors exceeded threshold. Exiting.")
+                else:
+                    # Non-API errors still get warned
+                    logger.info(f"{self.model_type} request error: {error_str[:80]}...")
+        return ""
+
+    # API Request Helpers
     # -----------------------------------------------------------------------
+    def _create_http_session(self) -> requests.Session:
+        """Create an HTTP session with configured retry and timeout settings."""
+        if config.shutdown_event.is_set():
+            return None
+            
+        session = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(
+            max_retries=config.http_client.get("max_retries", 1),
+            pool_connections=config.http_client.get("pool_connections", 1),
+            pool_maxsize=config.http_client.get("pool_maxsize", 1)
+        )
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
+        return session
+
+    def _make_api_request(self, url: str, data: dict) -> requests.Response:
+        """Make an API request with proper error handling and timeout settings."""
+        if config.shutdown_event.is_set():
+            return None
+
+        session = self._create_http_session()
+        if not session:
+            return None
+
+        connect_timeout = config.http_client.get("connect_timeout", 3.05)
+        read_timeout = config.http_client.get("read_timeout", 10)
+        
+        try:
+            resp = session.post(
+                url,
+                headers=self.headers,
+                data=json.dumps(data),
+                timeout=(connect_timeout, read_timeout)
+            )
+            if resp.status_code >= 400 and resp.status_code < 500:
+                return self._handle_api_error(Exception(f"Error code: {resp.status_code} - {resp.text}"))
+            resp.raise_for_status()
+            self._reset_api_error_count()  # Success! Reset error count
+            return resp
+        except requests.exceptions.ConnectionError as e:
+            return self._handle_api_error(e)
+        except Exception as e:
+            return self._handle_api_error(e)
+
+    def _format_chat_request(self, user_prompt: str, system_prompt: str, temperature: float) -> dict:
+        """Format a standard chat request payload."""
+        return {
+            "model": self.model_name,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "temperature": temperature
+        }
+
+    def _normalize_url(self, url: str) -> str:
+        """Ensure URL ends with a trailing slash."""
+        return url if url.endswith('/') else url + '/'
+
+    def _extract_response_content(self, response_json: dict) -> str:
+        """Extract the generated text from a response in a standard way."""
+        if "choices" in response_json:
+            return response_json['choices'][0]['message']['content'].strip()
+        elif "response" in response_json:
+            return self._parse_argo_response(response_json["response"])
+        return str(response_json)
+
+    def _parse_argo_response(self, response_text: str) -> str:
+        """Parse Argo-specific response format."""
+        if response_text.startswith("```json"):
+            response_text = response_text[len("```json"):].strip()
+            if response_text.endswith("```"):
+                response_text = response_text[:-3].strip()
+            try:
+                parsed = json.loads(response_text)
+                return parsed.get("answer", str(parsed)).strip()
+            except Exception as parse_error:
+                logger.warning(f"Failed to parse JSON from Argo response: {parse_error}")
+        return response_text
+
+    def _handle_api_model_request(self, user_prompt: str, system_prompt: str, temperature: float, extra_data: dict = None) -> str:
+        """Common handler for API-based models (vLLM, Argo, CAFE)"""
+        data = self._format_chat_request(user_prompt, system_prompt, temperature)
+        if extra_data:
+            data.update(extra_data)
+        
+        resp = self._make_api_request(self._normalize_url(self.endpoint), data)
+        if resp is None:
+            return ""
+            
+        try:
+            return self._extract_response_content(resp.json())
+        except Exception as e:
+            return self._handle_api_error(e)
+
+    def _handle_openai_request(self, user_prompt: str, system_prompt: str, temperature: float) -> str:
+        """Common handler for OpenAI-compatible APIs (OpenAI, ALCF)"""
+        try:
+            params = self._format_chat_request(user_prompt, system_prompt, temperature)
+            client = OpenAI(
+                api_key=self.key,
+                base_url=self.endpoint,
+                timeout=timeout,
+                max_retries=1
+            )
+            try:
+                response = client.chat.completions.create(**params)
+                self._reset_api_error_count()  # Success! Reset error count
+                return response.choices[0].message.content.strip()
+            except (Timeout, APITimeoutError) as e:
+                return self._handle_api_error(e)
+            except Exception as e:
+                return self._handle_api_error(e)
+        except Exception as e:
+            return self._handle_api_error(e)
 
 def run_hf_model(input_text, base_model, tokenizer):
     """
