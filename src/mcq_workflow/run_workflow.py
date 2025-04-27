@@ -60,6 +60,10 @@ def main():
     if start_step > 1:
         print(f"⏩ Skipping to step {start_step}\n")
 
+    # Prepare default input_file if skipping step 3
+    if start_step > 3:
+        input_file = "MCQ-subset.json" if n_value else "MCQ-combined.json"
+
     # Step 1: Convert PDF to JSON
     if start_step <= 1:
         print("Step 1: Convert PDF to JSON")
@@ -89,8 +93,10 @@ def main():
     # Step 4: Generate answers for all models
     if start_step <= 4:
         print("Step 4: Generate answers (all models)")
+        # Determine input file if not set (in case start_step == 4)
+        if 'input_file' not in locals():
+            input_file = "MCQ-subset.json" if n_value else "MCQ-combined.json"
         processes = []
-        # List available models
         result = subprocess.run(
             f"python -m common.list_models -p {p_value}",
             shell=True, capture_output=True, text=True, check=True
@@ -110,6 +116,9 @@ def main():
     # Step 5: Score answers between all models
     if start_step <= 5:
         print("Step 5: Score answers between all models")
+        # Determine input file if not set (in case start_step >3)
+        if 'input_file' not in locals():
+            input_file = "MCQ-subset.json" if n_value else "MCQ-combined.json"
         processes = []
         result = subprocess.run(
             f"python -m common.list_models -p {p_value}",
