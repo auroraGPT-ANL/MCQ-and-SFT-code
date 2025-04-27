@@ -73,7 +73,11 @@ def main():
 
     # Step 2: Generate MCQs
     print("Step 2: Generate MCQs")
-    run(f"python -m mcq_workflow.generate_mcqs -p {p_value} {v_flag}")
+    try:
+        run(f"python -m mcq_workflow.generate_mcqs -p {p_value} {v_flag}")
+    except subprocess.CalledProcessError as e:
+        print(f"❌ generate_mcqs failed (exit code {e.returncode}). Aborting workflow.")
+        sys.exit(e.returncode)
 
     # Step 3: Combine JSON files
     print("Step 3: Combine JSON files")
