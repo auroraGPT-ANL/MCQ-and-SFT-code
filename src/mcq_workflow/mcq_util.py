@@ -65,19 +65,34 @@ def load_file_lines(filepath: str) -> list:
 # quicker estimate of chunk count up front - saves 10-20s of startup and associated
 # user head-scratching before pbar is displayed
 
-def estimate_chunk_count(input_dir: str, files: list[str], bytes_per_chunk: int = 1000) -> int:
+import os
+import json
+from common import config
+CHUNK_SIZE = config.chunkSize
+
+def estimate_chunk_count(input_dir: str, files: list[str], *_ignore) -> int:
     """
-    Cheaper heuristic: assume ~1 chunk per `bytes_per_chunk` bytes of file size.
+    Heuristic: count total words in each file and assume CHUNK_SIZE words per chunk.
+    Any extra words count as one more chunk.
     """
+    config.logger.info("Estimating chunks to process.")
     total = 0
-    for f in files:
+    for fn in files:
+        path = os.path.join(input_dir, fn)
         try:
-            size = os.path.getsize(os.path.join(input_dir, f))
-            total += max(1, size // bytes_per_chunk)
-        except OSError:
+            with open(path, 'r', encoding='utf-8') as fp:
+                if fn.lower().endswith('.json'):
+                    rec = json.load(fp)
+                    text = rec.get('text', '')
+                else:
+                    text = fp.read()
+            words = len(text.split())
+            total += max(1, words // CHUNK_SIZE)
+        except Exception:
+            # on error (e.g. unreadable file), just skip it but let the user know as a FYI
+            config.logger.info(f"estimate_chunk_count: skipping {fn} - could not read/parse: {e}")
             continue
     return total
-
 
 def split_text_into_chunks(text: str, chunk_size: int = CHUNK_SIZE) -> list:
     """
@@ -240,7 +255,7 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
         if config.shutdown_event.is_set():
             config.logger.info("Shutdown in progress; suppressing error details.")
             return (filename, linenum, chunknum, None, False)
-        config.logger.warning(f"Error summarizing chunk {chunknum} in file {filename}: {e}")
+        config.logger.info(f"Error summarizing chunk {chunknum} in file {filename}: {e}")
         pbar_total.update(1)
         update_shared_counters(False, shared_counters, counter_lock)
         return (filename, linenum, chunknum, None, False)
@@ -255,7 +270,7 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
         if config.shutdown_event.is_set():
             config.logger.info("Shutdown in progress; suppressing error details.")
             return (filename, linenum, chunknum, None, False)
-        config.logger.warning(f"Error generating question for chunk {chunknum} in file {filename}: {e}")
+        config.logger.info(f"Error generating question for chunk {chunknum} in file {filename}: {e}")
         pbar_total.update(1)
         update_shared_counters(False, shared_counters, counter_lock)
         return (filename, linenum, chunknum, None, False)
@@ -325,7 +340,7 @@ def merge_mcq_output(out_file: str, new_qa_pairs: list) -> list:
                     except json.JSONDecodeError:
                         continue
         except Exception as e:
-            config.logger.warning(f"Error reading existing file {out_file}: {e}")
+            config.logger.info(f"Error reading existing file {out_file}: {e}")
     for pair in new_qa_pairs:
         mcq_id = (pair.get('file'), pair.get('line'), pair.get('chunk'), pair.get('model'))
         if mcq_id not in existing_ids:
@@ -444,10 +459,10 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
                         file_results.setdefault(fname, []).append(qa_pair)
                         processed_chunks[fname].add(chunk_id)
             except TimeoutError:
-                config.logger.warning("Chunk processing task timed out after 75s")
+                config.logger.info("Chunk processing task timed out after 75s")
             except Exception as e:
                 if config.shutdown_event.is_set():
-                    config.logger.info("Shutdown in progress; suppressing error details.")
+                    config.logger.warning("Shutdown in progress; suppressing error details.")
                     return
                 else:
                     config.logger.error(f"Error processing a chunk: {e}")
