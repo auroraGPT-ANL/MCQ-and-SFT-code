@@ -58,10 +58,10 @@ The fine-tuning step requires significantly more horsepower than a laptop, thus 
 strategies to be implemented:
   * A functioning workflow running on a server with sufficient capacity (and GPUs), and, alternatively
   * A workflow that runs on a laptop but submits a job to an HPC system to perform the fine-tuning step.
-* Other more pedestrian needs include:
-  * Address clean shutdown of the multi-threaded code on detection of keyboard interrupt.
-  * (list to be expanded)
-* Add  model types (and endpoints) for new resources starting with those made avaialble for the hackathon.
+* Model Access - test and expand
+  * Test HF and batch submission model types --
+[see model\_access.py](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/main/src/common/model_access.py)
+  * Add model types for hackathon resources (NVIDIA cluster, Cerebras, Lumi)
 
 
 ### New Workflow Development
@@ -71,6 +71,9 @@ and answers, i.e., MCQAs, from scientific papers, for use in fine-tuning models.
 workflow (src/nuggets\_workflow) that:
 1. extracts knowlege *nuggets* (statements of facts or findings) from the papers, then
 2. probes a target model to determine which nuggets are new information
+
+Currently there is a generate\_nuggets.py that extracts 'factoids' and, to identify them, we find the paper's DOI
+(looking on the front page and, if not found, has the LLM find it) and tag the factoid with the DOI.
 
 
 ### Transition from Static Workflow to an Agentic, semi-Autonomous System
