@@ -127,8 +127,9 @@ def score_answers_file(
     answer_file = os.path.join(output_dir,
         f'answers_{modelA_name.replace("/","+")}.jsonl')
     if not os.path.exists(answer_file):
-        config.logger.error(f"Missing answers file: {answer_file}")
-        config.initiate_shutdown("No answers to score.")
+        #config.logger.error(f"Missing answers file: {answer_file}")
+        #config.initiate_shutdown("No answers to score.")
+        config.initiate_shutdown(f"{answer_file} missing. No answers to score. Exiting.")
     score_file = os.path.join(
         output_dir,
         f'scores_{modelA_name.replace("/","+")}={modelB_name.replace("/","+")}.jsonl'
