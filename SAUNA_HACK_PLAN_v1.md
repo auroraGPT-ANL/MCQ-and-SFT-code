@@ -1,5 +1,3 @@
-# SAUNA\_HACK\_PLAN
-
 # Plan for TPC Spring Hackathon Data Pipelines Team
 
 *May 6-8, Helsinki, Finland*
