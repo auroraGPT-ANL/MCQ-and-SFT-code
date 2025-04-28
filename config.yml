@@ -51,17 +51,19 @@ model_b:
   baseModel:    "None"
   Tokenizer:    "None"
 
-#model_c:
+model_c:
+  name:         "argo:gpt35"
   #name:        "alcf:meta-llama/Meta-Llama-3-8B-Instruct"
-  #temperature : 0.7
-  #baseModel:   "None"
-  #Tokenizer:   "None"
+  temperature : 0.7
+  baseModel:   "None"
+  Tokenizer:   "None"
 
-#model_d:
+model_d:
   #name:        "alcf:mistralai/Mistral-7B-Instruct-v0.3"
-  #temperature:  0.7
-  #baseModel:   "None"
-  #Tokenizer:   "None"
+  name:         "argo:gpt4turbo"
+  temperature:  0.7
+  baseModel:   "None"
+  Tokenizer:   "None"
 
 # Argo API configuration
 argo:
