@@ -20,19 +20,18 @@ http_client:
   pool_connections: 1      # connection pool size
   pool_maxsize: 1          # maximum pool size
 
-model_type_endpoints:
-  openai: "https://api.openai.com/v1"
-  argo: "https://apps.inside.anl.gov/argoapi/api/v1/resource/chat"
-  argo_dev: "https://apps-dev.inside.anl.gov/argoapi/api/v1/resource/chat"
-
-# Model 
+# Models 
 # temperature, base model, tokenizer applied to whatever model is specified
 # on the command line. Model name below is used if no model is specified on 
 # the comment line.
 #
-# 
+
+model_type_endpoints:
+  openai:   "https://api.openai.com/v1"
+  argo:     "https://apps.inside.anl.gov/argoapi/api/v1/resource/chat"
+  argo_dev: "https://apps-dev.inside.anl.gov/argoapi/api/v1/resource/chat"
+
 # this model is the default for Model-A for score_answers.py
-#
 model:
   #name:        "openai:gpt-4"
   name:        "argo:gpt4large"
@@ -42,7 +41,7 @@ model:
 
 # model-B for score_answers.py
 # model-B also the model whose knowledge is tested w.r.t. factoid nuggets
-#         (note Temperature=0 is necessary)
+#         (Temperature=0 is recommended for knowledge testing)
 
 model_b:
   #name:         "openai:gpt-4"
@@ -54,7 +53,7 @@ model_b:
 model_c:
   name:         "argo:gpt35"
   #name:        "alcf:meta-llama/Meta-Llama-3-8B-Instruct"
-  temperature : 0.7
+  temperature:  0.7
   baseModel:   "None"
   Tokenizer:   "None"
 
