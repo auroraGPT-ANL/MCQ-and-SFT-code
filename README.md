@@ -21,16 +21,14 @@ The current, stable mcq\_workflow system operates from the command line, where e
 release (tagged in this repo as
 [Stable-V1](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/tree/Stable-V1)).
 
-Finally, this repo contains a work-in-progress, exploratory project to use the components from these two workflows as part of an **agentic systems**.
+The repository is organized as follows:
 
-The repository is thus organized as follows:
-
-1. Stable MCQ workflow in *legacy/scripts* uses components in *src* including:
 * *src/common* - tools common to both the MCQ and Nugget workflows, including model access, configuration, etc., 
 * *src/mcq\_workflow* - tools specific to generating, answering, and scoring MCQs, 
 * *src/nugget\_workflow* - tools specific to extracting knowledge nuggets and screening for those not already know by a target model,
-* *src/test* - test routines including a stub model for testing workflows quickly without model delays (including offline testing), and
 * *src/tune\_workflow* - tools to take MCQs (and eventually NKNs) to fine-tune a model. (also under construction, thus not yet included in either workflow)
+* *src/test* - test routines including a stub model for testing workflows quickly without model delays (including offline testing), and
+* *legacy/scripts* shell script to execute workflow (replaced with a python script in *src/mcq\_workflow*).
 
 **Contact:** Please email {foster|stevens|catlett}@anl.gov if you see things that are unclear or missing.
 
@@ -45,7 +43,7 @@ The repository is thus organized as follows:
 - [Notes](#notes)
 
 
-### Repository Setup
+### Getting Started: Repository Setup
 
 1. **Clone the Repository:**
 ```bash
