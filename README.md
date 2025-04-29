@@ -58,9 +58,6 @@ mkdir _PAPERS _JSON _MCQ _RESULTS
 
 3. **Set Up Conda Environment:**
 
-Important note: this install has been tested on MacOS (15.4) running on Apple M2 silicon. On 
-oher platforms the specifics in *environment.yml* may need to be tweaked.
-
 Option 1: Update your existing Conda environment
 ```bash
 conda env update --name YOUR_CONDA_ENV --file environment.yml
