@@ -32,16 +32,6 @@ The repository is thus organized as follows:
 * *src/test* - test routines including a stub model for testing workflows quickly without model delays (including offline testing), and
 * *src/tune\_workflow* - tools to take MCQs (and eventually NKNs) to fine-tune a model. (also under construction, thus not yet included in either workflow)
 
-All of the components in *src/common* *src/mcq\_workflow* and *src/nugget\_workflow* work both as Python
-modules (called form the CLI) and as part of an exploratory agent-based system, where each pipeline component is a
-subclass of *agent\_base.Agent* which enforces a python contract of the form:
-```
-def run(context: dict) -> dict 
-```
-Each component of the pipeline performs its specific set of tasks and returns its results to a shared *context* A light-weight *orchestrator.py* imports and runs the agents.
-
-The remainder of this README is currently specific to the CLI (legacy, stable) MCQ workflow.
-
 **Contact:** Please email {foster|stevens|catlett}@anl.gov if you see things that are unclear or missing.
 
 ## MCQ Workflow
