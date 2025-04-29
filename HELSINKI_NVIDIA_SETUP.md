@@ -37,7 +37,7 @@ From your project directory:
 conda env create -f environment.yml
 ```
 
-*(This may take a while — even 30–60 minutes.)*
+**(This will take a while — easily 30–60 minutes.)**
 
 ---
 
