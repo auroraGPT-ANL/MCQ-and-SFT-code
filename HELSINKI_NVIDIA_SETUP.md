@@ -1,8 +1,8 @@
-# README: Setting Up Conda on Curiosity Cluster
+## README: Setting Up Conda on Curiosity Cluster
 
 To use Conda properly on the Curiosity cluster login node:
 
-## 1. Add these lines to your `~/.bashrc`
+### 1. Add these lines to your `~/.bashrc`
 
 At the very bottom of `~/.bashrc`, add:
 
@@ -36,7 +36,7 @@ export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/MyCode/MCQ-and-SFT-code/src${PYT
 
 ---
 
-## 2. After editing `.bashrc`, reload it
+### 2. After editing `.bashrc`, reload it
 
 ```bash
 source ~/.bashrc
@@ -49,7 +49,7 @@ source ~/.bashrc
 
 ---
 
-## 3. Create your Conda environment (first time only)
+### 3. Create your Conda environment (first time only)
 
 From your project directory:
 
@@ -61,7 +61,7 @@ conda env create -f environment.yml
 
 ---
 
-## 4. Activate the environment
+### 4. Activate the environment
 
 Once created (or on future logins):
 
@@ -73,7 +73,7 @@ You are now ready to work!
 
 ---
 
-# Full Steps Summary for New Users
+## Full Steps Summary for New Users
 
 | Step | Command or Action |
 |:-----|:------------------|
@@ -84,10 +84,10 @@ You are now ready to work!
 
 ---
 
-# Notes
+## Notes
 
 - You only run `conda env create` **once**.
-- After that, **just activate** the environment every time you log in.
+- After that, just **activate** the environment every time you log in (`conda activate augpt_env`).
 - If you change `environment.yml` later, update your environment with:
   
   ```bash
