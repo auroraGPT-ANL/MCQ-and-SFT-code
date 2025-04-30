@@ -23,13 +23,19 @@ export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/YOUR_PATH/MCQ-and-SFT-code/src${
 path on the NVIDIA cluster, where $HOME is already included (/home/tpc-user). If you cloned the
 MCQ repo in your home directory then remove "/YOUR\_PATH" from the export command:
 
+```bssh
+# MCQ-and-SFT-code cloned in home directory
 export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/MCQ-and-SFT-code/src${PYTHONPATH:+:$PYTHONPATH}"
+```
 
 If you created a
 subdirectory, e.g., "MyCode" (/home/tpc-user/MyCode) then "YOUR\_PATH" is "MyCode" thus your export
 should be: 
 
+```bssh
+# MCQ-and-SFT-code cloned in MyCode directory within home directory
 export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/MyCode/MCQ-and-SFT-code/src${PYTHONPATH:+:$PYTHONPATH}"
+```
 
 ---
 
@@ -41,6 +47,8 @@ source ~/.bashrc
 
 (or just log out and log back in.)
 
+
+**NOTE:** For some ssh clients it seems the prompts get messed up, while they do not for other clients. ¯\_(ツ)_/¯
 ---
 
 ## 3. Create your Conda environment (first time only)
