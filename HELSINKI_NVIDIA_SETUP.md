@@ -19,21 +19,18 @@ export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/YOUR_PATH/MCQ-and-SFT-code/src${
 
 > The `module load conda` makes the Conda executable available.  
 > The `source` command enables `conda activate`.
-> The $PYTHONPATH is needed for the mcq pipleine modules. Edit the *YOUR_PATH* portion to match your
-path on the NVIDIA cluster, where $HOME is already included (/home/tpc-user). If you cloned the
-MCQ repo in your home directory then remove "/YOUR\_PATH" from the export command:
+> The $PYTHONPATH is needed for the mcq pipleine modules.
+
+Make sure to edit the *YOUR_PATH* portion to match your
+path on the NVIDIA cluster, where $HOME expands to */home/tpc-user* (use your username).
 
 ```bssh
-# MCQ-and-SFT-code cloned in home directory
+# If you cloned MCQ-and-SFT-code in your home directory
 export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/MCQ-and-SFT-code/src${PYTHONPATH:+:$PYTHONPATH}"
 ```
 
-If you created a
-subdirectory, e.g., "MyCode" (/home/tpc-user/MyCode) then "YOUR\_PATH" is "MyCode" thus your export
-should be: 
-
 ```bssh
-# MCQ-and-SFT-code cloned in MyCode directory within home directory
+# If you cloned MCQ-and-SFT-code cloned in, e.g., ~/MyCode 
 export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/MyCode/MCQ-and-SFT-code/src${PYTHONPATH:+:$PYTHONPATH}"
 ```
 
