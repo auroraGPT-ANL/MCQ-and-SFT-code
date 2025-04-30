@@ -45,7 +45,7 @@ source ~/.bashrc
 (or just log out and log back in.)
 
 
-> NOTE: For some ssh clients it seems the prompts get messed up, while they do not for other clients. ¯`\_(ツ)_/¯
+> NOTE: For some ssh clients it seems the prompts get messed up, while they do not for other clients. `¯\_(ツ)_/¯`
 
 ---
 
