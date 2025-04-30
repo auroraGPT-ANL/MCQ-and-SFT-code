@@ -41,14 +41,19 @@ The Nuggets (NKN) workflow – still under development – will extract factual 
 papers and identify which are new to the model. The fine-tuning stage applies tools for fine-tuning a
 model on these outputs and the code for this tage is present but unfinished.
 
-## Organization
+## Organization and Process
 
-We will form three groups of 2–3 people each. There are no fixed assignments – once we have an overall plan of
+We will have 6-8 people, so we don't need a rigid organization of sub-groups, and can form pairs or small teams
+at our discretion throughout the hackathon. There are no fixed assignments – once we have an overall plan of
 action targeting one or more of the above four threads, we will develop a high-level set of to-do items,
 reviewing and updating this list after each break during the hackathon.  All groups draw tasks from the
 resulting  shared to-do list and can re-distribute work as needed. For example, one group might initially
 focus on MCQ bugs while another tackles nuggets, but members are encouraged to switch areas or collaborate
 across groups. 
+
+We will share the *sauna-hack* branch.  The *main* branch is locked down to we don't accidentally merge
+to it. Because some of our action items involve *hardening* the code, we expect to periodically merge our
+changes via pull request (PR).
 
 
 ## 0. Overview and kickoff
