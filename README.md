@@ -62,6 +62,11 @@ The remainder of this README is currently specific to the CLI (legacy, stable) M
 git clone git@github.com:auroraGPT-ANL/MCQ-and-SFT-code.git
 cd MCQ-and-SFT-code
 ```
+*Alternatively*... if you are not using SSH access to Github, you can:
+```bash
+git clone https://github.com/auroraGPT-ANL/MCQ-and-SFT-code.git
+cd MCQ-and-SFT-code
+```
 
 2. **Prepare Working Directories:**
 ```bash
