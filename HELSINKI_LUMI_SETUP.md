@@ -8,10 +8,8 @@ At the very bottom of `~/.bashrc`, add:
 
 ```bash
 # Load shared conda module
-module load conda
-
-# Source conda setup manually
-source /cm/shared/apps/conda/etc/profile.d/conda.sh
+module load LUMI
+module load lumi-container-wrapper
 
 # set PYTHONPATH for MCQ pipeline at MCQ-and-SFT-code
 export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/YOUR_PATH/MCQ-and-SFT-code/src${PYTHONPATH:+:$PYTHONPATH}"
@@ -20,13 +18,13 @@ export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/YOUR_PATH/MCQ-and-SFT-code/src${
 Make sure to edit the *YOUR_PATH* portion to match your
 path on the NVIDIA cluster, where $HOME expands to */users/your_username* (use your username).
 
-```bssh
-# If you cloned MCQ-and-SFT-code in your home directory
+If you cloned MCQ-and-SFT-code in your home directory:
+```bash
 export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/MCQ-and-SFT-code/src${PYTHONPATH:+:$PYTHONPATH}"
 ```
 
-```bssh
-# If you cloned MCQ-and-SFT-code cloned in, e.g., ~/MyCode 
+If you cloned MCQ-and-SFT-code cloned in, e.g., ~/MyCode:
+```bash
 export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/MyCode/MCQ-and-SFT-code/src${PYTHONPATH:+:$PYTHONPATH}"
 ```
 
@@ -54,7 +52,7 @@ cotainr build mcq.sif --system=lumi-g --conda-env=environment.yml
 
 ---
 
-### 4. Activate the environment
+### 4. Using the environment
 
 Once created (or on future logins), you'll be running the codes as follows:
 
