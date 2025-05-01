@@ -1,10 +1,11 @@
 ## README: Setting Up Conda on LUMI
 
-To use Conda properly on Lumi:
+On Lumi everything is executed in containers, so you'll create a container with your conda env and then
+exec that container.
 
 ### 1. Add these lines to your `~/.bashrc`
 
-At the very bottom of `~/.bashrc`, add:
+At the bottom of your `~/.bashrc`, add:
 
 ```bash
 # Load shared conda module
@@ -48,7 +49,7 @@ From your project directory:
 cotainr build mcq.sif --system=lumi-g --conda-env=environment.yml
 ```
 
-**(This will take a while— 10–15 minutes.)**
+**(This can take a while— building our env took 10–15 minutes.)**
 
 ---
 
@@ -63,8 +64,6 @@ Or, if submitting a batch job:
 ```bash
 srun singularity exec mcq.sif python -m [script] [options]
 ```
-
-**(CeC is still testing this)**
 
 You are now ready to work!
 
