@@ -65,5 +65,14 @@ Or, if submitting a batch job:
 srun singularity exec mcq.sif python -m [script] [options]
 ```
 
-You are now ready to work!
+## LUMI Resource Reservation (from Aleksi)
 
+We have an advance reservation of 8 full nodes (4x AMD MI250X GPU / 8 GCD’s) in
+**small-g** partition.
+
+It is available from 2025-05-06T09:00:00 to 2025-05-08T17:00:00.
+
+Use Slurm parameter: `--reservation=TPC`
+
+Using the reservation bypasses queues (as long as there is capacity left within the
+reservation). Submitting jobs without using the reservation is also possible.
