@@ -18,9 +18,9 @@ There are additional classes that have not been thoroughly tested, including *pb
 For the Helsinki hackathon we will have access to the following resources, with pre-arranged access--
 see the TPC Slack space (hackathon-finland-2025)[https://trillionparam-5lp9574.slack.com/archives/C08NL8PKLE8]
 channel for related details and discussions. 
-* (Lumi)[https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/sauna-hack/HELSINKI_LUMI_SETUP.md]
+* [Lumi](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/sauna-hack/HELSINKI_LUMI_SETUP.md)
 * A cerebras system provided by Cerebras
-* A 32-GPU (A100) cluster provided by NVIDIA (see (PPT deck in Slack)[https://trillionparam-5lp9574.slack.com/files/U05H8JM8NFQ/F08QUKPHDFA/axis_curiosity_hackathon_userpdf.pdf])
+* A 32-GPU (A100) cluster provided by NVIDIA (see [PPT deck in Slack](https://trillionparam-5lp9574.slack.com/files/U05H8JM8NFQ/F08QUKPHDFA/axis_curiosity_hackathon_userpdf.pdf))
 
 We will want to get this workflow up and running on Lumi and the NVIDIA cluster, as well as adding
 the inference endpoints for using models hosted on each of these resources.
