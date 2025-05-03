@@ -49,7 +49,8 @@ From your project directory:
 cotainr build mcq.sif --system=lumi-g --conda-env=environment.yml
 ```
 
-**(This can take a while— building our env took 10–15 minutes.)**
+> This can take a while— building our env took 10–15 minutes. You can also skip
+this step and try using the environment noted in */scratch* described below.
 
 ---
 
@@ -57,12 +58,33 @@ cotainr build mcq.sif --system=lumi-g --conda-env=environment.yml
 
 Once created (or on future logins), you'll be running the codes as follows:
 
+To run on the login node:
 ```bash
 singularity exec mcq.sif python -m [script] [options]
 ```
-Or, if submitting a batch job:
+To run on a Lumi compute node (with one-shot resource allocation)::
 ```bash
-srun singularity exec mcq.sif python -m [script] [options]
+srun singularity exec mcq.sif python -m 
+
+srun -A project_465001984 -p standard-g \
+     --nodes=1 --gres=gpu:1 --cpus-per-task=4 --mem=64G \
+     --time=02:00:00 \
+     singularity exec --rocm mcq.sif \
+       python -m [script] [options]
+```
+
+Get node resources and fire up an interactive session on them:
+```bash
+srun -A project_465001984 -p standard-g \
+     --nodes=1 --gres=gpu:1 --cpus-per-task=4 --mem=64G \
+     --time=02:00:00 \
+     --pty bash -i
+```
+
+From the interactive session you established with srun, you can now
+run the scripts with:
+```bash
+singularity exec --rocm mcq.sif python -m [script] [options]
 ```
 
 ## LUMI Resource Reservation (from Aleksi)
@@ -77,7 +99,7 @@ Use Slurm parameter: `--reservation=TPC`
 Using the reservation bypasses queues (as long as there is capacity left within the
 reservation). Submitting jobs without using the reservation is also possible.
 
-## In case useful...
+## Shared environment in /scratch
 
 The hackathon project scratch area is `/scratch/project_465001984`.  
 There I have created a `MCQ` directory and in it placed a singularity image
