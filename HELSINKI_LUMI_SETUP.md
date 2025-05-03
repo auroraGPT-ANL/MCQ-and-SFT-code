@@ -16,6 +16,9 @@ module load lumi-container-wrapper
 export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/YOUR_PATH/MCQ-and-SFT-code/src${PYTHONPATH:+:$PYTHONPATH}"
 ```
 
+> the `$PYTHONPATH` bit is specific to the *data pipes* team so you can ignore if you are not working
+on that code.
+
 Make sure to edit the *YOUR_PATH* portion to match your
 path on the NVIDIA cluster, where $HOME expands to */users/your_username* (use your username).
 
