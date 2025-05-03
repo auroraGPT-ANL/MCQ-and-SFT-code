@@ -28,9 +28,9 @@ the inference endpoints for using models hosted on each of these resources.
 
 ## Goals for this Hackathon
 
-Over the 2.5-day Sauna hackathon, our team will strengthen multiple related workflows (pipelines) for generating
-training data from scientific papers. We have at least four work threads to select from, though we  may not be able
-to tackle all of them.  These are: 
+Over the 2.5-day hackathon, our team will strengthen multiple related workflows (pipelines) for generating
+training data from scientific papers. We have at least four work threads to select from, though we are unlikely
+to have time to to tackle all of them.  These are: 
 1. Harden the existing MCQ workflow, 
 2. Expand a new approoach -- knowledge-nugget (NKN) workflow, 
 3. Update and harden the model fine-tuning step that follows the MCQ and NKN workflows, and
@@ -38,8 +38,11 @@ to tackle all of them.  These are:
 implementing a minimal prototype of the underlying agentic framework.
 
 As described in this repo, the MCQ workflow converts PDFs to JSON, generates multiple-choice questions and
-answers, and has models score each other’s answers.
-The Nuggets (NKN) workflow – still under development – will extract factual “knowledge nuggets” from
+answers, and has models score each other’s answers. 
+[This figure](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/sauna-hack/MCQ-Workflow.png)
+is a good place to start.
+
+The Nuggets (NKN) workflow – under development – will extract factual “knowledge nuggets” from
 papers and identify which are new to the model. The fine-tuning stage applies tools for fine-tuning a
 model on these outputs and the code for this tage is present but unfinished.
 
@@ -51,11 +54,12 @@ action targeting one or more of the above four threads, we will develop a high-l
 reviewing and updating this list after each break during the hackathon.  All groups draw tasks from the
 resulting  shared to-do list and can re-distribute work as needed. For example, one group might initially
 focus on MCQ bugs while another tackles nuggets, but members are encouraged to switch areas or collaborate
-across groups. 
+across groups.  Some ideas on how to operate are 
+[sketched out here](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/sauna-hack/HACKING_PROCESS.md).
 
-We will share the *sauna-hack* branch.  The *main* branch is locked down to we don't accidentally merge
+In the github repo we do all of our work in the *sauna-hack* branch.  The *main* branch is locked down to we don't accidentally merge
 to it. Because some of our action items involve *hardening* the code, we expect to periodically merge our
-changes via pull request (PR).
+changes with *main*via pull request (PR).
 
 
 ## 0. Overview and kickoff
@@ -153,5 +157,5 @@ or tools.  Below is an example set of tasks that will need to be refined.
 ### Deliverables
 1. MCQ pipeline passes end‑to‑end integration test.  
 2. Nuggets extraction produces validated JSON on sample set.  
-3. Tuning script trains a toy model (or submits job) without error.  
-4. *If agentic track pursued:* Agent Runner runs MCQ agent on at least two papers and generates artifacts.
+3. Tuning script trains a small model without error.  
+4. *If agentic track pursued:* Agent Runner runs MCQ agent on at a small set of test papers and generates training data.
