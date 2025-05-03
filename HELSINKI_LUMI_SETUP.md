@@ -64,8 +64,6 @@ singularity exec mcq.sif python -m [script] [options]
 ```
 To run on a Lumi compute node (with one-shot resource allocation)::
 ```bash
-srun singularity exec mcq.sif python -m 
-
 srun -A project_465001984 -p standard-g \
      --nodes=1 --gres=gpu:1 --cpus-per-task=4 --mem=64G \
      --time=02:00:00 \
