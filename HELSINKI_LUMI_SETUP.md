@@ -76,3 +76,27 @@ Use Slurm parameter: `--reservation=TPC`
 
 Using the reservation bypasses queues (as long as there is capacity left within the
 reservation). Submitting jobs without using the reservation is also possible.
+
+## In case useful...
+
+The hackathon project scratch area is `/scratch/project_465001984`.  
+There I have created a `MCQ` directory and in it placed a singularity image
+(mcq.sif) with the conda env for running our codes..
+
+It is 7GB so you mignt want to use this one
+in case you want to save disk space in your home dir (20GB limit).
+Or you may just want to cp to your $HOME rather than building one (which takes 15-20 min).
+
+To run our scripts using the .sif file there, once you have cloned the repo in your home
+directory and set up .bashrc as noted above::
+
+```bash
+singularity exec --rocm /scratch/project_465001984/MCQ/mcq.sif python -m [SCRIPT] [OPTIONS/ARGS]
+```
+
+For example:
+```bash
+singularity exec --rocm /scratch/project_465001984/MCQ/mcq.sif python -m mcq_workflow.run_workflow -v
+```
+
+> --rocm tells singularity to use the AMD/ROCm libraries wherease if Lumi had NVIDIA GPU's you would use --nv
