@@ -16,7 +16,8 @@ The code in this repo has been tested on a variety of inference endpoints, inclu
 There are additional classes that have not been thoroughly tested, including *pb* (submit batch job to Argonne systems; requires Argonne account)
 
 For the Helsinki hackathon we will have access to the following resources, with pre-arranged access--
-see the TPC Slack space (hackathon-finland-2025)[https://trillionparam-5lp9574.slack.com/archives/C08NL8PKLE8]
+see the TPC Slack space 
+[hackathon-finland-2025](https://trillionparam-5lp9574.slack.com/archives/C08NL8PKLE8)
 channel for related details and discussions. 
 * [Lumi](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/sauna-hack/HELSINKI_LUMI_SETUP.md)
 * A cerebras system provided by Cerebras
