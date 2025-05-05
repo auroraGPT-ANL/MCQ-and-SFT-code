@@ -77,7 +77,7 @@ they follow the Agentic tasks in §5._
 Deliver, in 2.5 days:
 - Harden **MCQ** pipeline  
 - Expand **NKN** (nuggets) pipeline  
-- Implement **Tuning** pipeline that consumes MCQ/NKN data  
+- Implement **Tuning** pipeline that consumes MCQ/NKN data. Start with lora\_fine\_tune.py
 - *(Optional)* Bootstrap an **Agentic framework** able to orchestrate MCQ now and NKN later  
 
 ## 2. Organization
@@ -123,9 +123,12 @@ agentic/...  ← optional agentic track base branch (if created)
 
 ### Tuning Pipeline Setup
 - Data preparation from MCQ/NKN  
+- test execution and add missing packages to environment.yml
+- integrate similar features as prev steps (-v, -q, pbar)
+- integrate use of config.yml vs hard-coded, adding a target model to config.yml
+- add to run\_workflow with ability to either run *locally* or submit a job to run on
+larger compute config. (e.g., a switch to specify --local or --remote?)
 - Fine‑tuning experiment (small‑scale)  
-- HPC execution path  
-- Integration into scripts  
 - Documentation  
 
 ## 5. Agentic Prototype Track (optional)
@@ -137,8 +140,13 @@ If chosen, Group B (or B+C) aims for a minimal **Agent Runner** that:
 
 ### Agentic tasks
 
-An agentic design must be fleshed out, at least in terms of general architecture and the selection of any underlying frameworks
-or tools.  Below is an example set of tasks that will need to be refined.
+An agentic design must be fleshed out, at least in terms of general architecture and the
+selection of any underlying frameworks or tools. 
+
+A potential starting point might be to define an approach to readily integrating other
+functions to the MCQ/NKN pipeline, e.g. OpenAI's PDF-to-JSON in place of simple\_parse
+
+Below is an example set of tasks that will need to be refined.
 
 | Priority | Task |
 |----------|------|
