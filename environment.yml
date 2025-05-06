@@ -85,4 +85,5 @@ dependencies:
    - wrapt==1.17.2
    - trl
    - peft
+   - bitsandbytes
 
