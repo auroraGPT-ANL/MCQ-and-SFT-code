@@ -1,0 +1,13 @@
+channels:
+  - rapidsai-nightly
+  - defaults
+dependencies:
+  # ROCm-build of PyTorch 2.3.x
+  - pytorch==2.3.*=rocm5.7*
+  - torchvision
+  - torchaudio
+  # ROCm-friendly quantiser
+  - auto-gptq>=0.7.0
+  - pip:
+      - scipy            # build dep for auto-gptq
+

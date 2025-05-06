@@ -1,0 +1,8 @@
+channels:
+  - nvidia/label/cuda-12.4.1
+  - defaults
+dependencies:
+  - pytorch==2.3.*=cuda120*
+  - torchvision
+  - torchaudio
+  - bitsandbytes>=0.43
