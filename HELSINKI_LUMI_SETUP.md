@@ -1,7 +1,8 @@
 ## README: Setting Up Conda on LUMI
 
-On Lumi everything is executed in containers, so you'll create a container with your conda env and then
-exec that container.
+On Lumi everything is executed in containers. We have identified
+a pre-built container on Lumi and we use it in conjuntion with
+our conda environment.
 
 ### 1. Update your ~/.bashrc
 
@@ -52,6 +53,11 @@ source ~/.bashrc
 
 ### 3. Move into the root repo directory (MCQ-and-SFT-code
 
+If you cloned the repo from your ~/ ($HOME) directory:
+```bash
+cd MCQ-and-SFT-code
+```
+
 ### 4. Create your Conda environment (first time only)
 
 ```bash
@@ -62,7 +68,9 @@ conda env create -f rocm.yml
 
 ### 5. Create the launch script
 
-Create the file launch\_augpt\_env.sh with the following contents:
+Create the file `launch_augpt_env.sh` in the MCQ-and-SFT-code repo root
+directory with the following contents:
+
 ```bash
 #!/bin/bash
 
