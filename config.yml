@@ -160,6 +160,18 @@ prompts:
     0.5-0.79 = partially overlapping information
     0.0-0.49 = different facts
 
+  evaluate_known_facts_system: |
+    You are a fact-checking assistant that assesses the validity of factual claims.
+    You evaluate if you already know these facts based on your pretraining. 
+    You provide a True or False answer for each fact, with True indicating you already know the fact and False indicating you do not.
+    Return your assessment in a structured JSON format.
+
+  evaluate_known_facts_user: |
+    Which of the following claims do you already know based on your pretraining? 
+    
+    Claims to evaluate:
+    {claims_json}
+
   # Step 5: Fact validation (to assess if facts are actually valid claims)
   # Step 5: Fact validation (to assess if facts are actually valid claims)
   fact_validation_system: |
