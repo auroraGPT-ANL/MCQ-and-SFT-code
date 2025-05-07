@@ -1,8 +1,9 @@
+# rocm.yml — complete ROCm‐flavored environment for augpt_env
 name: augpt_env
 channels:
-  - rapidsai-nightly
+  - rocm
+  - pytorch
   - defaults
-  - conda-forge
 dependencies:
   # ──────────── base CPU deps ────────────
   - bzip2=1.0.8
@@ -23,11 +24,11 @@ dependencies:
   - jq
 
   # ──────────── ROCm GPU deps ────────────
-  - pytorch==2.3.*=rocm5.7*
-  - torchvision
-  - torchaudio
+  - pytorch=2.3
+  - torchvision=0.14
+  - torchaudio=0.13.1
 
-  # ──────────── everything else via pip ────────────
+  # ─── everything else installed via pip ───
   - pip:
       - huggingface_hub
       - transformers
@@ -92,9 +93,6 @@ dependencies:
       - wasabi==1.1.3
       - weasel==0.4.1
       - wrapt==1.17.2
-      - trl
-      - peft
-      # ─── ROCm-friendly quantiser (pip) ───
-      - auto-gptq>=0.7.0
-      - scipy
+      - auto-gptq>=0.7.0    # ROCm-friendly quantiser
+      - scipy              # build-time dep for auto-gptq
 
