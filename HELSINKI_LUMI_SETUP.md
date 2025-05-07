@@ -3,35 +3,41 @@
 On Lumi everything is executed in containers, so you'll create a container with your conda env and then
 exec that container.
 
-### 1. Add these lines to your `~/.bashrc`
+### 1. Update your ~/.bashrc
 
-At the bottom of your `~/.bashrc`, add:
 
 ```bash
-# Load shared conda module
-module load LUMI
-module load lumi-container-wrapper
+# ~/.bashrc - for Lumi ROCm + Singularity + Conda + Hugging Face
 
-# set PYTHONPATH for MCQ pipeline at MCQ-and-SFT-code
-export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/YOUR_PATH/MCQ-and-SFT-code/src${PYTHONPATH:+:$PYTHONPATH}"
+# Load aliases if present
+test -s ~/.alias && . ~/.alias || true
+
+# Load CrayEnv only if not inside a container
+if [[ -z "$SINGULARITY_NAME" ]]; then
+    module load CrayEnv
+    module load cotainr
+fi
+
+# Enable conda
+export PATH="$HOME/miniconda/bin:$PATH"
+eval "$(conda shell.bash hook)"
+
+# Use project scratch space
+export MYSCRATCH=/scratch/project_465001984
+
+# Set Conda & pip caches to scratch
+export CONDA_ENVS_PATH=$MYSCRATCH/conda_envs
+export CONDA_PKGS_DIRS=$MYSCRATCH/conda_pkgs
+export PIP_CACHE_DIR=$MYSCRATCH/pip_cache
+
+# Set Hugging Face cache to scratch
+export HF_HOME=$MYSCRATCH/hf_cache
+export TRANSFORMERS_CACHE=$HF_HOME
+export HF_DATASETS_CACHE=$HF_HOME
+export HF_MODULES_CACHE=$HF_HOME/modules
+export HF_METRICS_CACHE=$HF_HOME/metrics
+
 ```
-
-> the `$PYTHONPATH` bit is specific to the *data pipes* team so you can ignore if you are not working
-on that code.
-
-Make sure to edit the *YOUR_PATH* portion to match your
-path on the NVIDIA cluster, where $HOME expands to */users/your_username* (use your username).
-
-If you cloned MCQ-and-SFT-code in your home directory:
-```bash
-export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/MCQ-and-SFT-code/src${PYTHONPATH:+:$PYTHONPATH}"
-```
-
-If you cloned MCQ-and-SFT-code cloned in, e.g., ~/MyCode:
-```bash
-export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/MyCode/MCQ-and-SFT-code/src${PYTHONPATH:+:$PYTHONPATH}"
-```
-
 ---
 
 ### 2. After editing `.bashrc`, reload it
@@ -44,27 +50,117 @@ source ~/.bashrc
 
 ---
 
-### 3. Create your Conda environment (first time only)
+### 3. Move into the root repo directory (MCQ-and-SFT-code
 
-From your project directory:
+### 4. Create your Conda environment (first time only)
 
 ```bash
-cotainr build mcq.sif --system=lumi-g --conda-env=environment.yml
+conda env create -f rocm.yml
 ```
 
-> This can take a while— building our env took 10–15 minutes. You can also skip
-this step and try using the environment noted in */scratch* described below.
+> This can take 5-10 minutes. 
+
+### 5. Create the launch script
+
+Create the file launch\_augpt\_env.sh with the following contents:
+```bash
+#!/bin/bash
+
+echo "🔧 Checking node type..."
+
+# ❌ Prevent running on login/UAN nodes
+if [[ $(hostname) == uan* ]]; then
+  echo "❌ ERROR: This script must be run from a compute node (not from a login/UAN node like $(hostname))."
+  echo "💡 Use 'salloc' or 'srun' to allocate a compute node session before running this script."
+  exit 1
+fi
+
+echo "✅ Running on a compute node: $(hostname)"
+
+# ✅ Get script directory and locate token file
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+TOKEN_FILE="$SCRIPT_DIR/hf_access_token.txt"
+
+if [[ ! -f "$TOKEN_FILE" ]]; then
+  echo "❌ ERROR: Token file not found at $TOKEN_FILE"
+  exit 1
+fi
+
+export HUGGINGFACE_TOKEN=$(cat "$TOKEN_FILE")
+
+# ✅ Use scratch-based cache locations
+echo "📦 Setting up scratch-based cache paths..."
+export MYSCRATCH=/scratch/project_465001984
+export CONDA_ENVS_PATH=$MYSCRATCH/conda_envs
+export CONDA_PKGS_DIRS=$MYSCRATCH/conda_pkgs
+export PIP_CACHE_DIR=$MYSCRATCH/pip_cache
+
+# ✅ Hugging Face cache in scratch
+export HF_HOME=$MYSCRATCH/hf_cache
+export TRANSFORMERS_CACHE=$HF_HOME
+export HF_DATASETS_CACHE=$HF_HOME
+export HF_MODULES_CACHE=$HF_HOME/modules
+export HF_METRICS_CACHE=$HF_HOME/metrics
+
+# ✅ Define paths
+echo "📁 Setting container, conda, and project paths..."
+export MYSIF=/appl/local/containers/tested-containers/lumi-pytorch-rocm-6.2.1-python-3.12-pytorch-20240918-vllm-4075b35-dockerhash-3cad1babc4b8.sif
+MYCONDA="$HOME/miniconda"
+MYENV="augpt_env"
+MYPY="$HOME/MCQ-and-SFT-code:$HOME/MCQ-and-SFT-code/src"
+
+echo "🚀 Launching container and initializing interactive environment..."
+singularity exec --rocm \
+  -B "$HOME","$MYSCRATCH" \
+  --env HUGGINGFACE_TOKEN=$HUGGINGFACE_TOKEN \
+  "$MYSIF" bash --rcfile <(cat <<EOF
+echo "📡 Sourcing Conda environment..."
+source "$MYCONDA/etc/profile.d/conda.sh"
+export CONDA_ENVS_PATH="$CONDA_ENVS_PATH"
+export CONDA_PKGS_DIRS="$CONDA_PKGS_DIRS"
+export PIP_CACHE_DIR="$PIP_CACHE_DIR"
+export HF_HOME="$HF_HOME"
+export TRANSFORMERS_CACHE="$TRANSFORMERS_CACHE"
+export HF_DATASETS_CACHE="$HF_DATASETS_CACHE"
+export HF_MODULES_CACHE="$HF_MODULES_CACHE"
+export HF_METRICS_CACHE="$HF_METRICS_CACHE"
+export HUGGINGFACE_TOKEN="$HUGGINGFACE_TOKEN"
+conda activate "$MYENV"
+echo "✅ Conda environment '$MYENV' activated."
+
+export PYTHONPATH="$MYPY"
+echo "📚 PYTHONPATH set to: $PYTHONPATH"
+
+PS1="($MYENV Singularity) \u@\h:\w\\$ "
+EOF
+)
+
+```
+
+Make it executable:
+```bash
+chmod +x launch_augpt_env.sh
+```
 
 ---
 
-### 4. Using the environment
+### 6. Request compute resources and establish the runtime environment (shell)
 
-Once created (or on future logins), you'll be running the codes as follows:
+E.g., for a single node shell session on Lumi:
 
-To run on the login node:
 ```bash
-singularity exec mcq.sif python -m [script] [options]
+srun -A project_465001984 -p standard-g      --nodes=1 --gres=gpu:1 --cpus-per-task=4 --mem=64G      --time=02:00:00      --pty bash -i
+./launch_augpt_env.sh
 ```
+### 7. Using the environment
+
+Once created (or on future logins), you'll be running the codes as shown
+in the root README.md of the MCQ-and-SFT-code repo directory.
+
+---
+
+## other potentially useful incantations and notes
+
 To run on a Lumi compute node (with one-shot resource allocation)::
 ```bash
 srun -A project_465001984 -p standard-g \
@@ -82,13 +178,7 @@ srun -A project_465001984 -p standard-g \
      --pty bash -i
 ```
 
-From the interactive session you established with srun, you can now
-run the scripts with:
-```bash
-singularity exec --rocm mcq.sif python -m [script] [options]
-```
-
-## LUMI Resource Reservation (from Aleksi)
+## LUMI Resource Reservation for the Hackathon (May 2025)(from Aleksi)
 
 We have an advance reservation of 8 full nodes (4x AMD MI250X GPU / 8 GCD’s) in
 **small-g** partition.
