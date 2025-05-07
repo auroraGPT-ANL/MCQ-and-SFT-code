@@ -310,6 +310,11 @@ def extract_abstract(chunk):
         return None
 
 
+def clean_response(response_text: str) -> str:
+    # Remove illegal control characters that would break json.loads.
+    return re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', response_text)
+
+
 def deduplicate_facts(facts, model, similarity_threshold=0.88, confidence_threshold=0.5):
     """
     Cluster similar facts and filter low-confidence ones.
@@ -379,7 +384,7 @@ def extract_atomic_facts(chunk, model):
             system_prompt=config.prompts['fact_extraction_system']
         )
 
-        facts = json.loads(response)
+        facts = json.loads(clean_response(response))
 
         if not isinstance(facts, list):
             config.logger.warning(f"Unexpected facts format (not a list): {facts}")
