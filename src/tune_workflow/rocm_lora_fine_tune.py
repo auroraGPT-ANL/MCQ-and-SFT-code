@@ -28,15 +28,13 @@ def main():
     # -------------------------------------------------------------------------
     # 1. Log in to Hugging Face
     # -------------------------------------------------------------------------
-    try:
-        with open("hf_access_token.txt", "r") as file:
-            hf_access_token = file.read().strip()
-        login(hf_access_token)
-    except FileNotFoundError:
-        print("ERROR: 'hf_access_token.txt' not found. Please create this file with a valid Hugging Face access token.")
+    hf_token = os.getenv("HUGGINGFACE_TOKEN")
+    if not hf_token:
+        print("ERROR: HUGGINGFACE_TOKEN environment variable is not set.")
         return
+    login(hf_token)
 
-    model_name = "meta-llama/Llama-3.1-8B-Instruct"
+    model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
     max_seq_length = 2048
 
     # -------------------------------------------------------------------------
@@ -54,7 +52,7 @@ def main():
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         base_model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            device_map="auto",  # or "cuda" for ROCm; adjust if needed
+            device_map="auto",
         )
     except Exception as e:
         print(f"ERROR: Failed to download or load the model '{model_name}'.")
@@ -89,10 +87,10 @@ def main():
             gradient_accumulation_steps=4,
             warmup_steps=10,
             max_steps=num_steps,
-            bf16=True,  # Adjust if unsupported
+            bf16=True,
             logging_steps=1,
             output_dir="SFT-outputs",
-            optim="adamw_torch",  # Use CPU/GPU-friendly optimizer
+            optim="adamw_torch",
             seed=3407,
         ),
     )
@@ -110,7 +108,7 @@ def main():
     # -------------------------------------------------------------------------
     try:
         model_to_merge = peft_model.from_pretrained(
-            AutoModelForCausalLM.from_pretrained(model_name).to("cuda"),  # adjust for ROCm if needed
+            AutoModelForCausalLM.from_pretrained(model_name).to("cuda"),
             output_dir
         )
         merged_model = model_to_merge.merge_and_unload()
