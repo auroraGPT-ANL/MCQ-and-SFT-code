@@ -15,6 +15,7 @@ from tqdm import tqdm
 import concurrent.futures
 from concurrent.futures import TimeoutError
 import threading
+import copy
 
 from common import config
 from common.model_access import Model
@@ -315,6 +316,46 @@ def clean_response(response_text: str) -> str:
     return re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', response_text)
 
 
+def evaluate_model_known_facts(facts, model):
+    """
+    This function evaluates the model's knowledge of the facts
+
+    Args:
+        facts (list): List of fact dictionaries with 'claim' keys
+        model (Model): The model instance to use for similarity comparison
+
+    Returns:
+        list: list of facts 
+    """
+    # Make a deep copy of the facts to avoid modifying the original list
+    local_facts = copy.deepcopy(facts)
+    
+    # Get the claims from the local facts
+    claims = [fact['claim'] for fact in local_facts]
+    # Convert claims to JSON format for querying the model
+    json_facts = json.dumps(claims, ensure_ascii=False)
+
+    # Query the model to evaluate known facts
+    response = model.run(
+        system_prompt=config.prompts['evaluate_known_facts_system'],
+        user_prompt=config.prompts['evaluate_known_facts_user'].format(
+            claims_json=json_facts
+        )
+    )
+    try:
+        model_knowledge_data = json.loads(response)
+    except (json.JSONDecodeError, KeyError) as e:
+        config.logger.warning(f"Error parsing similarity response: {e}")
+
+    # Add 'known_fact' key based on match
+    for fact in local_facts:
+        claim = fact.get('claim')
+        if claim in model_knowledge_data:
+            fact['known_fact'] = model_knowledge_data[claim]
+
+    return local_facts
+
+
 def deduplicate_facts(facts, model, similarity_threshold=0.88, confidence_threshold=0.5):
     """
     Cluster similar facts and filter low-confidence ones.
@@ -362,6 +403,9 @@ def deduplicate_facts(facts, model, similarity_threshold=0.88, confidence_thresh
 
         if not is_duplicate:
             unique_facts.append(fact)
+
+    # Evaluate the model's knowledge of the unique facts
+    unique_facts = evaluate_model_known_facts(unique_facts, model)
 
     return unique_facts
 
