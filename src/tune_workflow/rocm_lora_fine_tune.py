@@ -34,6 +34,17 @@ def main():
         return
     login(hf_token)
 
+    # -------------------------------------------------------------------------
+    # 1.5 Configure distributed training if needed
+    # -------------------------------------------------------------------------
+    if "RANK" not in os.environ or "MASTER_ADDR" not in os.environ:
+        print("⚠️  No distributed training environment detected — falling back to single-node mode.")
+        os.environ["RANK"] = "0"
+        os.environ["WORLD_SIZE"] = "1"
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "29500"
+
+
     model_name = "meta-llama/Llama-3.1-8B-Instruct"
 
     max_seq_length = 2048
