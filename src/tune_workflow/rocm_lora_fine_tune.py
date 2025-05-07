@@ -34,7 +34,8 @@ def main():
         return
     login(hf_token)
 
-    model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
+    model_name = "meta-llama/Llama-3.1-8B-Instruct"
+
     max_seq_length = 2048
 
     # -------------------------------------------------------------------------
@@ -49,10 +50,11 @@ def main():
     # 3. Load model and tokenizer (no quantization)
     # -------------------------------------------------------------------------
     try:
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_token)
         base_model = AutoModelForCausalLM.from_pretrained(
             model_name,
             device_map="auto",
+            token=hf_token
         )
     except Exception as e:
         print(f"ERROR: Failed to download or load the model '{model_name}'.")
@@ -108,7 +110,7 @@ def main():
     # -------------------------------------------------------------------------
     try:
         model_to_merge = peft_model.from_pretrained(
-            AutoModelForCausalLM.from_pretrained(model_name).to("cuda"),
+            AutoModelForCausalLM.from_pretrained(model_name, token=hf_token).to("cuda"),
             output_dir
         )
         merged_model = model_to_merge.merge_and_unload()

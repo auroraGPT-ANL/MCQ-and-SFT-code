@@ -36,7 +36,8 @@ def main():
         print("ERROR: 'hf_access_token.txt' not found. Please create this file with a valid Hugging Face access token.")
         return
 
-    model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
+    model_name = "meta-llama/Llama-3.1-8B-Instruct"
+
 
     max_seq_length = 2048
 
