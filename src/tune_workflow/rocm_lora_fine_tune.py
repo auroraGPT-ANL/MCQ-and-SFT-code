@@ -66,17 +66,23 @@ def main():
     num_steps = max(1, num_rows // 4)
 
     # -------------------------------------------------------------------------
-    # 4. Load model and tokenizer (default RoPE)
+    # 4. Load model and tokenizer with clean config (remove rope_scaling)
     # -------------------------------------------------------------------------
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_token)
-        config = AutoConfig.from_pretrained(model_name, token=hf_token)
-        # Remove any custom rope_scaling to use the model's default RoPE
-        if hasattr(config, "rope_scaling"):
-            delattr(config, "rope_scaling")
+
+        # Load original config and strip rope_scaling entries completely
+        orig_config = AutoConfig.from_pretrained(model_name, token=hf_token)
+        config_dict = orig_config.to_dict()
+        config_dict.pop("rope_scaling", None)
+        # Reinstantiate config class without rope_scaling
+        config_class = type(orig_config)
+        clean_config = config_class(**config_dict)
+
+        # Load model using the cleaned config
         base_model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            config=config,
+            config=clean_config,
             device_map="auto",
             token=hf_token,
             torch_dtype=torch.float16
@@ -154,4 +160,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
