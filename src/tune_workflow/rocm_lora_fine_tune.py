@@ -55,7 +55,9 @@ def main():
         os.environ["MASTER_PORT"] = "29500"
 
     #model_name = "meta-llama/Llama-3.1-8B-Instruct"
-    model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
+    #model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
+    model_name = "meta-llama/Llama-3.1-8B"
+
     max_seq_length = 2048
 
     # -------------------------------------------------------------------------
