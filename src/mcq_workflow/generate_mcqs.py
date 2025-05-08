@@ -19,6 +19,7 @@ def generate_mcqs_dir(input_dir: str,
                        output_dir: str,
                        model_name: str,
                        parallel_workers: int = 4,
+                       num_answers: int=7,
                        verbose: bool = False,
                        force: bool = False) -> str:
     """
@@ -93,6 +94,12 @@ if __name__ == "__main__":
         help='Enable verbose logging'
     )
     parser.add_argument(
+        '-a', '--answers',
+        type=int,
+        default=7,
+        help='Number of answers to generate (default: 7)'
+    )
+    parser.add_argument(
         '-p', '--parallel',
         type=int,
         default=4,
@@ -112,6 +119,7 @@ if __name__ == "__main__":
         output_dir=args.output,
         model_name=args.model,
         parallel_workers=args.parallel,
+        num_answers=args.answers,
         verbose=args.verbose,
         force=args.force,
     )

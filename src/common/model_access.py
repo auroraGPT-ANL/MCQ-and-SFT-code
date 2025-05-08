@@ -103,8 +103,14 @@ class Model:
         elif model_name.startswith("cafe:"):
             self._init_cafe_model(model_name)
 
+        elif model_name.startswith("cels:"):
+            self._init_cels_model(model_name)
+
         elif model_name.startswith("openai:"):
             self._init_openai_model(model_name)
+
+        elif model_name.startswith("cels:"):
+            self._init_cels_model(model_name)
 
         elif model_name.startswith("argo:") or model_name.startswith("argo-dev:"):
             self._init_argo_model(model_name)
@@ -180,6 +186,33 @@ class Model:
         self.endpoint = "https://195.88.24.64/v1"
         self.key = "CELS"  # placeholder
         logger.info(f"Cafe model: {self.model_name}")
+
+    # "cels:<model>" - CELS models
+    def _init_cels_model(self, model_name: str):
+        self.shortname = model_name.split("cels:")[1]
+        print(f'Running CELS model {self.shortname}')
+
+        servers = [s for s in config.cels_model_servers if s.get("shortname") == self.shortname]
+        if len(servers)!=1:
+            print('Server not found:', self.shortname)
+            exit(1)
+        server = servers[0]
+
+        self.model_name=server["openai_model"]
+        self.model_type = "OpenAI"
+        self.endpoint = server["openai_api_base"]
+        self.key = (
+            openai_access_token if server["openai_api_key"].startswith("${")
+            else server["openai_api_key"]
+        )
+
+        #client=openai.OpenAI(
+        #    api_key=key,
+        #    base_url=s["openai_api_base"],
+        #    timeout=60,
+        #),  
+
+        logger.info(f"CELS model: {self.model_name}")
 
     # "openai:<model>" - OpenAI
     def _init_openai_model(self, model_name: str):

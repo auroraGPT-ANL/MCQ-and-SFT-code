@@ -49,12 +49,15 @@ def main():
                         help="Select n random MCQs")
     parser.add_argument("-s", "--step", type=int, default=1,
                         help="Step number to start from (1–5)")
+    parser.add_argument("-a", "--answers", type=int, default=7,
+                        help="Number of answers to generate")
     args = parser.parse_args()
 
     p_value = args.p
     v_flag = "-v" if args.v else ""
     n_value = args.n
     start_step = args.step
+    num_answers = args.answers
 
     # If starting beyond step 1, print skip banner
     if start_step > 1:
@@ -72,7 +75,7 @@ def main():
     # Step 2: Generate MCQs
     if start_step <= 2:
         print("Step 2: Generate MCQs")
-        run(f"python -m mcq_workflow.generate_mcqs -p {p_value} {v_flag}")
+        run(f"python -m mcq_workflow.generate_mcqs -p {p_value} -a {num_answers} {v_flag}")
 
     # Step 3: Combine JSON files
     if start_step <= 3:

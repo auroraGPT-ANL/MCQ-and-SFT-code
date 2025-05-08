@@ -261,9 +261,14 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
         return (filename, linenum, chunknum, None, False)
 
     # Step 2: Generate the MCQ.
+    #print('XXXXX step2')
     try:
-        step2_msg = config.user_message_2.format(augmented_chunk=augmented_chunk)
-        generated_question = model.run(user_prompt=step2_msg, system_prompt=config.system_message_2)
+        step2_msg = config.user_message_2.format(augmented_chunk=augmented_chunk, num_answers=7)
+        #print(f'SSSSS:\n{step2_msg}\n-------ssssss')
+        #print(f'GGGGGaaaaaa:{config.system_message_2}\n----gggg')
+        #print(f'GGGGG:{config.system_message_2.format(num_answers=7)}\n----gggg')
+        generated_question = model.run(user_prompt=step2_msg, system_prompt=config.system_message_2.format(num_answers=7))
+        #print(f'{generated_question}\n=======ssssss')
         if config.shutdown_event.is_set():  # Check after model.run
             return (filename, linenum, chunknum, None, False)
     except Exception as e:
@@ -276,12 +281,15 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
         return (filename, linenum, chunknum, None, False)
 
     # Step 3: Verify and Score the MCQ.
+    #print('YYYYY Step 3')
     try:
         step3_msg = config.user_message_3.format(
             augmented_chunk=augmented_chunk,
             generated_question=generated_question
         )
+        #print(f'MSG={step3_msg}\n-----')
         step3_output = model.run(user_prompt=step3_msg, system_prompt=config.system_message_3)
+        #print(f'OUT={step3_output}\n=====')
         if config.shutdown_event.is_set():  # Check after model.run
             return (filename, linenum, chunknum, None, False)
         if step3_output is None:
@@ -291,6 +299,7 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
         model_answer = str(parsed_json.get("answer", "")).strip()
         model_score = parsed_json.get("score", 0)
         pbar_total.set_postfix_str(f"Score: {model_score}")
+        #print('xxxx got score')
 
         if isinstance(model_score, int) and model_score > config.minScore:
             config.logger.info(f"MCQ generated for chunk {chunknum} in file {filename}, score {model_score} > {config.minScore}.")

@@ -33,7 +33,8 @@ model_type_endpoints:
 
 # this model is the default for Model-A for score_answers.py
 model:
-  name:        "openai:gpt-4.1-mini"
+  #name:        "openai:gpt-4.1-mini"
+  name:        "cels:scout"
   #name:        "argo:gpt4large"
   temperature:  0.7  
   baseModel:   "None"
@@ -44,7 +45,8 @@ model:
 #         (Temperature=0 is recommended for knowledge testing)
 
 model_b:
-  name:         "openai:gpt-4.1-nano"
+  name:        "cels:scout"
+    #name:         "openai:gpt-4.1-nano"
   #name:         "argo:gpt4"
   temperature:   0.0
   baseModel:    "None"
@@ -161,7 +163,6 @@ prompts:
     0.0-0.49 = different facts
 
   # Step 5: Fact validation (to assess if facts are actually valid claims)
-  # Step 5: Fact validation (to assess if facts are actually valid claims)
   fact_validation_system: |
     You are a fact-checking assistant that assesses the validity of factual claims.
     You evaluate how precise, accurate, and well-supported each claim is based on the provided evidence.
@@ -186,12 +187,12 @@ prompts:
     Return as a JSON array maintaining the same structure as the input, but with potentially revised claims and confidence scores.
   # Step 2
   system_message_2: |
-    You are a helpful assistant that generates exactly ONE multiple-choice question based on the provided text (augmented_chunk). The question must have 5 possible answers, numbered 1 to 5. Exactly one of these 5 choices is correct. Mark the correct choice with '(*)' at the end for later grading.
+    You are a helpful assistant that generates exactly ONE multiple-choice question based on the provided text (augmented_chunk). The question must have {num_answers} possible answers, numbered 1 to {num_answers}. Exactly one of these {num_answers} choices is correct. Mark the correct choice with '(*)' at the end for later grading.
   user_message_2: |
     Below is some content called augmented_chunk.
     Please:
     1) Create exactly one multiple-choice question that can be answered by the augmented_chunk.
-    2) Provide five distinct options (1 to 5) as answers.
+    2) Provide {num_answers} distinct options (1 to {num_answers}) as answers.
     3) Mark the correct answer with '(*)' at the end of that particular option.
 
     Constraints:
@@ -201,7 +202,7 @@ prompts:
     augmented_chunk:
     {augmented_chunk}
 
-  # Step 33
+  # Step 3
   system_message_3: |
     You are a helpful assistant that evaluates how well an answer matches the question in context of the augmented_chunk. Return your evaluation strictly as valid JSON with no additional text, with precisely three key-value pairs: answer, score, and comment. No additional formatting or text should be included, just these three key-value pairs in valid JSON format.
   user_message_3: |

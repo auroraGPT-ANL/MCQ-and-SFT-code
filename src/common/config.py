@@ -112,7 +112,6 @@ def load_config(path: str | None = None) -> dict[str, Any]:
         logger.error(f"Error parsing YAML file '{path}': {exc}")
         raise
 
-
 def load_secrets(cfg: dict[str, Any]) -> dict[str, Any]:
     """Load the secrets file referred to in *config.yml* (returns empty dict if absent)."""
     rel_path = cfg.get("argo", {}).get("username_file")
@@ -152,6 +151,10 @@ def get_secret(path: str, default: Any = None) -> Any:
 
 _CONFIG = load_config()
 _SECRETS = load_secrets(_CONFIG)
+
+_SERVERS = load_config('/eagle/argonne_tpc/IanFoster/MCQ-and-SFT-code/servers.yml')
+
+cels_model_servers = _SERVERS.get("servers", {})
 
 # convenience for legacy code
 argo_user = get_secret("argo.username")
