@@ -75,27 +75,17 @@ def main():
     num_steps = num_rows % 4
 
     # -------------------------------------------------------------------------
-    # 4. Load model and tokenizer with patched rope_scaling
+    # 4. Load model and tokenizer with minimal RoPE override
     # -------------------------------------------------------------------------
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_token)
-
         config = AutoConfig.from_pretrained(model_name, token=hf_token)
 
-        # Patch RoPE scaling if CLI args provided or if loaded config is invalid
-        if args.rope_scaling_type and args.rope_scaling_factor:
-            config.rope_scaling = {
-                "type": args.rope_scaling_type,
-                "factor": args.rope_scaling_factor
-            }
-        elif hasattr(config, "rope_scaling"):
-            rs = config.rope_scaling
-            if isinstance(rs, dict):
-                # Only keep the allowed fields
-                config.rope_scaling = {
-                    "type": rs.get("type", "dynamic"),
-                    "factor": rs.get("factor", 8.0)
-                }
+        # Override RoPE scaling with a minimal valid dict
+        config.rope_scaling = {
+            "type": args.rope_scaling_type or "dynamic",
+            "factor": args.rope_scaling_factor or 8.0
+        }
 
         base_model = AutoModelForCausalLM.from_pretrained(
             model_name,
@@ -182,4 +172,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
