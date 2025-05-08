@@ -189,13 +189,14 @@ class Model:
 
     # "cels:<model>" - CELS models
     def _init_cels_model(self, model_name: str):
+        if config.cels_model_servers == None:
+            initiate_shutdown('CELS models not configured')
         self.shortname = model_name.split("cels:")[1]
         print(f'Running CELS model {self.shortname}')
 
         servers = [s for s in config.cels_model_servers if s.get("shortname") == self.shortname]
         if len(servers)!=1:
-            print('Server not found:', self.shortname)
-            exit(1)
+            initiate_shutdown(f'CELS model {self.shortname} not known')
         server = servers[0]
 
         self.model_name=server["openai_model"]
@@ -205,12 +206,6 @@ class Model:
             openai_access_token if server["openai_api_key"].startswith("${")
             else server["openai_api_key"]
         )
-
-        #client=openai.OpenAI(
-        #    api_key=key,
-        #    base_url=s["openai_api_base"],
-        #    timeout=60,
-        #),  
 
         logger.info(f"CELS model: {self.model_name}")
 

@@ -152,9 +152,13 @@ def get_secret(path: str, default: Any = None) -> Any:
 _CONFIG = load_config()
 _SECRETS = load_secrets(_CONFIG)
 
-_SERVERS = load_config('/eagle/argonne_tpc/IanFoster/MCQ-and-SFT-code/servers.yml')
-
-cels_model_servers = _SERVERS.get("servers", {})
+try:
+    _SERVERS = load_config('servers.yml')
+    cels_model_servers = _SERVERS.get("servers", {})
+except:
+    print('File servers.yml not found')
+    _SERVERS = None
+    cels_model_servers = None
 
 # convenience for legacy code
 argo_user = get_secret("argo.username")
