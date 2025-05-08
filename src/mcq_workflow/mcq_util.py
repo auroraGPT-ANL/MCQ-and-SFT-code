@@ -32,6 +32,13 @@ from tqdm import tqdm
 from concurrent.futures import TimeoutError
 from common import config
 
+from typing import Any, Dict
+import torch
+from pydantic import BaseModel, Field
+from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+from lmformatenforcer import JsonSchemaParser
+from lmformatenforcer.integrations.transformers import build_transformers_prefix_allowed_tokens_fn
+
 # Global constant
 CHUNK_SIZE = config.chunkSize
 
@@ -171,7 +178,6 @@ def attempt_parse_json(s: str) -> dict:
         raise ValueError(f"Parsed JSON is not an object: {parsed}")
     return parsed
 
-
 def robust_parse_json_output(response_text: str, model) -> dict:
     """
     Robustly parse the JSON output from a model.
@@ -189,28 +195,65 @@ def robust_parse_json_output(response_text: str, model) -> dict:
         if config.shutdown_event.is_set():
             raise ValueError("Shutdown in progress")
         try:
+            # Log the error to a file
             with open("json_error_log.txt", "a", encoding="utf-8") as error_file:
                 error_file.write(f"Initial JSON parsing error: {e}\nResponse: {response_text}\n\n")
         except Exception as file_e:
+            # Log the error to the main logger if file writing fails
             config.logger.error(f"Failed to write JSON error log: {file_e}")
-        config.logger.info(f"Initial JSON parsing failed: {e}. Attempting reformat.")
-        fix_prompt = f"""
-Convert the following text strictly into valid JSON with exactly three keys: "question", "answer", and "score".
-Do not include any additional text or markdown.
-TEXT TO FIX:
-{response_text}
-        """
-        fixed_output = model.run(
-            system_prompt="You are a strict JSON converter. Return only valid JSON.",
-            user_prompt=fix_prompt
+        
+        # Attempt to fix the JSON using a model prompt
+        # This is a fallback mechanism to handle cases where the model's output is not valid JSON
+        config.logger.info(f"Initial JSON parsing failed: {e}. Attempting reformat with enforced decoding.")
+
+        # Define your desired data structure
+        class AnswerFormat(BaseModel):
+            question: str = Field(description="The original question being answered")
+            answer: str = Field(description="The actual answer text")
+            score: int = Field(description="A score from 0-10 evaluating the answer")
+
+        # Initialize the JSON schema parser based on the AnswerFormat schema
+        parser = JsonSchemaParser(AnswerFormat.schema())
+
+        # Build the prefix function to enforce the JSON schema during generation
+        prefix_fn = build_transformers_prefix_allowed_tokens_fn(model.tokenizer, parser)
+
+        # Construct the prompt to guide the model's response
+        fix_prompt = (
+            f"Convert the following text strictly into valid JSON with exactly three keys: "
+            f"{AnswerFormat.schema_json()}\n"
+            f"Do not include any additional text or markdown.\n"
+            f"TEXT TO FIX:\n"
+            f"{response_text}"
         )
+
+        # Create a Hugging Face text-generation pipeline using the provided model
+        hf_pipeline = pipeline(
+            "text-generation",
+            model=model.base_model,
+            tokenizer=model.tokenizer,
+            device_map="auto",
+            torch_dtype=torch.float16
+        )
+
+        # Generate the output with enforced format
+        fixed_output = hf_pipeline(
+            fix_prompt,
+            prefix_allowed_tokens_fn=prefix_fn,
+            max_new_tokens=512,
+            return_full_text=False
+        )[0]["generated_text"]
+
+        print(f"[INFO] Generated output: {fixed_output[0:100]}...")
+
         if not fixed_output.strip():
             if cleaned.isdigit():
                 return {"answer": "", "score": int(cleaned), "comment": ""}
             else:
                 raise ValueError("Fix prompt returned empty output.")
         try:
-            return attempt_parse_json(fixed_output)
+            # Parse the generated JSON string into a Python dictionary
+            return AnswerFormat.parse_raw(fixed_output.strip()).dict()
         except Exception as fix_error:
             try:
                 with open("json_error_log.txt", "a", encoding="utf-8") as error_file:
@@ -261,14 +304,9 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
         return (filename, linenum, chunknum, None, False)
 
     # Step 2: Generate the MCQ.
-    #print('XXXXX step2')
     try:
-        step2_msg = config.user_message_2.format(augmented_chunk=augmented_chunk, num_answers=7)
-        #print(f'SSSSS:\n{step2_msg}\n-------ssssss')
-        #print(f'GGGGGaaaaaa:{config.system_message_2}\n----gggg')
-        #print(f'GGGGG:{config.system_message_2.format(num_answers=7)}\n----gggg')
-        generated_question = model.run(user_prompt=step2_msg, system_prompt=config.system_message_2.format(num_answers=7))
-        #print(f'{generated_question}\n=======ssssss')
+        step2_msg = config.user_message_2.format(augmented_chunk=augmented_chunk)
+        generated_question = model.run(user_prompt=step2_msg, system_prompt=config.system_message_2)
         if config.shutdown_event.is_set():  # Check after model.run
             return (filename, linenum, chunknum, None, False)
     except Exception as e:
@@ -281,15 +319,12 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
         return (filename, linenum, chunknum, None, False)
 
     # Step 3: Verify and Score the MCQ.
-    #print('YYYYY Step 3')
     try:
         step3_msg = config.user_message_3.format(
             augmented_chunk=augmented_chunk,
             generated_question=generated_question
         )
-        #print(f'MSG={step3_msg}\n-----')
         step3_output = model.run(user_prompt=step3_msg, system_prompt=config.system_message_3)
-        #print(f'OUT={step3_output}\n=====')
         if config.shutdown_event.is_set():  # Check after model.run
             return (filename, linenum, chunknum, None, False)
         if step3_output is None:
@@ -299,7 +334,6 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
         model_answer = str(parsed_json.get("answer", "")).strip()
         model_score = parsed_json.get("score", 0)
         pbar_total.set_postfix_str(f"Score: {model_score}")
-        #print('xxxx got score')
 
         if isinstance(model_score, int) and model_score > config.minScore:
             config.logger.info(f"MCQ generated for chunk {chunknum} in file {filename}, score {model_score} > {config.minScore}.")
@@ -459,7 +493,7 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
         processed_chunks = {}  # filename -> set of (linenum, chunknum)
         for future in futures:
             try:
-                fname, linenum, chunknum, qa_pair, success = future.result(timeout=75)
+                fname, linenum, chunknum, qa_pair, success = future.result(timeout=120)
                 if qa_pair is not None:
                     chunk_id = (linenum, chunknum)
                     if fname not in processed_chunks:
@@ -521,4 +555,3 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
             f"      Chunks processed:: {shared_counters}\n"
             f"      MCQs saved to {output_dir}."
         )
-
