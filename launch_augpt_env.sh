@@ -1,4 +1,10 @@
 #!/bin/bash
+
+# This script is to launch a pre-tested .sif container on Lumi and set up
+# our environment for the rocm_lora_fine_tune.py code.  However, after 48h
+# of hacking this code still cannot run on the ROCm platform...a more skilled
+# hacker might be able to make it work...
+#
 echo "🔧 Checking node type..."
 
 # ❌ Prevent running on login/UAN nodes
