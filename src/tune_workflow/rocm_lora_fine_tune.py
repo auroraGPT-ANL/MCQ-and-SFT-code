@@ -4,7 +4,6 @@
 
 import argparse
 import os
-import torch
 from trl import SFTTrainer
 from transformers import (
     TrainingArguments,
@@ -32,14 +31,6 @@ def main():
     parser.add_argument(
         '--model-name', type=str, default="meta-llama/Llama-3.1-8B",
         help="Model name to load from Hugging Face hub."
-    )
-    parser.add_argument(
-        '--rope-scaling-type', type=str, default="dynamic",
-        help="RoPE scaling type (e.g., 'dynamic' or 'linear')."
-    )
-    parser.add_argument(
-        '--rope-scaling-factor', type=float, default=8.0,
-        help="RoPE scaling factor (e.g., 8.0)."
     )
     args = parser.parse_args()
 
@@ -75,25 +66,20 @@ def main():
     num_steps = max(1, num_rows // 4)
 
     # -------------------------------------------------------------------------
-    # 4. Load model and tokenizer with explicit rope_scaling override
+    # 4. Load model and tokenizer (default RoPE)
     # -------------------------------------------------------------------------
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_token)
         config = AutoConfig.from_pretrained(model_name, token=hf_token)
-
-        # Prepare minimal valid rope_scaling dict
-        rope_kwargs = {
-            "type": args.rope_scaling_type,
-            "factor": args.rope_scaling_factor
-        }
-
+        # Remove any custom rope_scaling to use the model's default RoPE
+        if hasattr(config, "rope_scaling"):
+            delattr(config, "rope_scaling")
         base_model = AutoModelForCausalLM.from_pretrained(
             model_name,
             config=config,
             device_map="auto",
             token=hf_token,
-            torch_dtype=torch.float16,
-            rope_scaling=rope_kwargs
+            torch_dtype=torch.float16
         )
     except Exception as e:
         print(f"ERROR: Failed to download or load the model '{model_name}'.")
@@ -135,7 +121,6 @@ def main():
             seed=3407,
         ),
     )
-
     trainer.train()
 
     # -------------------------------------------------------------------------
@@ -145,11 +130,11 @@ def main():
     tokenizer.save_pretrained(output_dir)
 
     # -------------------------------------------------------------------------
-    # 8. Merge LoRA weights with base model
+    # 8. Merge LoRA weights
     # -------------------------------------------------------------------------
     try:
-        merged = peft_model.merge_and_unload()
-        merged.save_pretrained(output_dir, save_method="merged_16bit")
+        merged_model = peft_model.merge_and_unload()
+        merged_model.save_pretrained(output_dir, save_method="merged_16bit")
         tokenizer.save_pretrained(output_dir)
     except Exception as e:
         print("WARNING: Failed to merge LoRA weights with base model.")
@@ -160,7 +145,7 @@ def main():
     # -------------------------------------------------------------------------
     try:
         repo_id = "ianfoster/" + os.path.basename(output_dir)
-        merged.push_to_hub(repo_id)
+        merged_model.push_to_hub(repo_id)
         tokenizer.push_to_hub(repo_id)
     except Exception as e:
         print("NOTE: Skipping Hugging Face push (optional).")
