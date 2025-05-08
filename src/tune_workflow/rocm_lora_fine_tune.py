@@ -22,16 +22,29 @@ def main():
     )
     parser.add_argument(
         '-d', "--dataset_file", type=str, required=True,
-        help="Path to the JSON file containing the dataset (e.g. text.json)."
+        help="Path to the JSON file containing the dataset."
     )
     parser.add_argument(
         '-o', "--output_dir", type=str, required=True,
         help="Output directory for saving the final model."
     )
+    parser.add_argument(
+        '--model-name', type=str, default="meta-llama/Llama-3.1-8B",
+        help="Model name to load from Hugging Face hub."
+    )
+    parser.add_argument(
+        '--rope-scaling-type', type=str, default=None,
+        help="Optional: RoPE scaling type (e.g., 'dynamic')."
+    )
+    parser.add_argument(
+        '--rope-scaling-factor', type=float, default=None,
+        help="Optional: RoPE scaling factor (e.g., 8.0)."
+    )
     args = parser.parse_args()
 
     dataset_file = args.dataset_file
     output_dir = args.output_dir
+    model_name = args.model_name
 
     # -------------------------------------------------------------------------
     # 1. Log in to Hugging Face
@@ -43,25 +56,17 @@ def main():
     login(hf_token)
 
     # -------------------------------------------------------------------------
-    # 1.5 Configure distributed training if needed
+    # 2. Configure distributed training if needed
     # -------------------------------------------------------------------------
     if "RANK" not in os.environ or "MASTER_ADDR" not in os.environ:
-        print(
-            "⚠️  No distributed training environment detected — falling back to single-node mode."
-        )
+        print("⚠️  No distributed training environment detected — falling back to single-node mode.")
         os.environ["RANK"] = "0"
         os.environ["WORLD_SIZE"] = "1"
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "29500"
 
-    #model_name = "meta-llama/Llama-3.1-8B-Instruct"
-    #model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
-    model_name = "meta-llama/Llama-3.1-8B"
-
-    max_seq_length = 2048
-
     # -------------------------------------------------------------------------
-    # 2. Load dataset
+    # 3. Load dataset
     # -------------------------------------------------------------------------
     dataset = load_dataset("json", data_files=dataset_file, split="train")
     num_rows = dataset.num_rows
@@ -69,16 +74,23 @@ def main():
     num_steps = num_rows % 4
 
     # -------------------------------------------------------------------------
-    # 3. Load model and tokenizer with default rope_scaling
+    # 4. Load model and tokenizer
     # -------------------------------------------------------------------------
+    rope_scaling = None
+    if args.rope_scaling_type and args.rope_scaling_factor:
+        rope_scaling = {
+            "type": args.rope_scaling_type,
+            "factor": args.rope_scaling_factor
+        }
+
     try:
-        tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=hf_token)
-        # no override: use model's default RoPE settings
+        tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_token)
         base_model = AutoModelForCausalLM.from_pretrained(
             model_name,
             device_map="auto",
-            use_auth_token=hf_token,
-            torch_dtype=torch.float16
+            token=hf_token,
+            torch_dtype=torch.float16,
+            rope_scaling=rope_scaling
         )
     except Exception as e:
         print(f"ERROR: Failed to download or load the model '{model_name}'.")
@@ -90,7 +102,7 @@ def main():
     tokenizer.padding_side = "right"
 
     # -------------------------------------------------------------------------
-    # 4. Create and wrap PEFT LoRA model
+    # 5. Create and wrap PEFT LoRA model
     # -------------------------------------------------------------------------
     lora_config = LoraConfig(
         r=16,
@@ -102,7 +114,7 @@ def main():
     peft_model = get_peft_model(base_model, lora_config)
 
     # -------------------------------------------------------------------------
-    # 5. Train with SFTTrainer
+    # 6. Train with SFTTrainer
     # -------------------------------------------------------------------------
     trainer = SFTTrainer(
         model=peft_model,
@@ -124,17 +136,17 @@ def main():
     trainer.train()
 
     # -------------------------------------------------------------------------
-    # 6. Save adapter and tokenizer
+    # 7. Save adapter and tokenizer
     # -------------------------------------------------------------------------
     peft_model.save_pretrained(output_dir, save_adapter=True, save_config=True)
     tokenizer.save_pretrained(output_dir)
 
     # -------------------------------------------------------------------------
-    # 7. Merge LoRA weights with base model
+    # 8. Merge LoRA weights with base model
     # -------------------------------------------------------------------------
     try:
         model_to_merge = peft_model.from_pretrained(
-            AutoModelForCausalLM.from_pretrained(model_name, use_auth_token=hf_token).to("cuda"),
+            AutoModelForCausalLM.from_pretrained(model_name, token=hf_token).to("cuda"),
             output_dir
         )
         merged_model = model_to_merge.merge_and_unload()
@@ -145,7 +157,7 @@ def main():
         print(f"Details: {e}")
 
     # -------------------------------------------------------------------------
-    # 8. Push to Hugging Face Hub (optional)
+    # 9. Push to Hugging Face Hub (optional)
     # -------------------------------------------------------------------------
     try:
         repo_id = "ianfoster/" + os.path.basename(output_dir)
