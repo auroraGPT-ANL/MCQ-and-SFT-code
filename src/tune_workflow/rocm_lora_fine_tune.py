@@ -34,12 +34,12 @@ def main():
         help="Model name to load from Hugging Face hub."
     )
     parser.add_argument(
-        '--rope-scaling-type', type=str, default=None,
-        help="Optional: RoPE scaling type (e.g., 'dynamic')."
+        '--rope-scaling-type', type=str, default="dynamic",
+        help="RoPE scaling type (e.g., 'dynamic' or 'linear')."
     )
     parser.add_argument(
-        '--rope-scaling-factor', type=float, default=None,
-        help="Optional: RoPE scaling factor (e.g., 8.0)."
+        '--rope-scaling-factor', type=float, default=8.0,
+        help="RoPE scaling factor (e.g., 8.0)."
     )
     args = parser.parse_args()
 
@@ -72,19 +72,19 @@ def main():
     dataset = load_dataset("json", data_files=dataset_file, split="train")
     num_rows = dataset.num_rows
     print(f"Number of rows: {num_rows}")
-    num_steps = num_rows % 4
+    num_steps = max(1, num_rows // 4)
 
     # -------------------------------------------------------------------------
-    # 4. Load model and tokenizer with minimal RoPE override
+    # 4. Load model and tokenizer with explicit rope_scaling override
     # -------------------------------------------------------------------------
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_token)
         config = AutoConfig.from_pretrained(model_name, token=hf_token)
 
-        # Override RoPE scaling with a minimal valid dict
-        config.rope_scaling = {
-            "type": args.rope_scaling_type or "dynamic",
-            "factor": args.rope_scaling_factor or 8.0
+        # Prepare minimal valid rope_scaling dict
+        rope_kwargs = {
+            "type": args.rope_scaling_type,
+            "factor": args.rope_scaling_factor
         }
 
         base_model = AutoModelForCausalLM.from_pretrained(
@@ -92,7 +92,8 @@ def main():
             config=config,
             device_map="auto",
             token=hf_token,
-            torch_dtype=torch.float16
+            torch_dtype=torch.float16,
+            rope_scaling=rope_kwargs
         )
     except Exception as e:
         print(f"ERROR: Failed to download or load the model '{model_name}'.")
@@ -147,12 +148,8 @@ def main():
     # 8. Merge LoRA weights with base model
     # -------------------------------------------------------------------------
     try:
-        model_to_merge = peft_model.from_pretrained(
-            AutoModelForCausalLM.from_pretrained(model_name, token=hf_token).to("cuda"),
-            output_dir
-        )
-        merged_model = model_to_merge.merge_and_unload()
-        merged_model.save_pretrained(output_dir, save_method="merged_16bit")
+        merged = peft_model.merge_and_unload()
+        merged.save_pretrained(output_dir, save_method="merged_16bit")
         tokenizer.save_pretrained(output_dir)
     except Exception as e:
         print("WARNING: Failed to merge LoRA weights with base model.")
@@ -163,7 +160,7 @@ def main():
     # -------------------------------------------------------------------------
     try:
         repo_id = "ianfoster/" + os.path.basename(output_dir)
-        merged_model.push_to_hub(repo_id)
+        merged.push_to_hub(repo_id)
         tokenizer.push_to_hub(repo_id)
     except Exception as e:
         print("NOTE: Skipping Hugging Face push (optional).")
@@ -172,3 +169,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
