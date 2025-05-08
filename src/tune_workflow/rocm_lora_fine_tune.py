@@ -9,7 +9,8 @@ from trl import SFTTrainer
 from transformers import (
     TrainingArguments,
     AutoModelForCausalLM,
-    AutoTokenizer
+    AutoTokenizer,
+    AutoConfig
 )
 from peft import get_peft_model, LoraConfig, TaskType
 from datasets import load_dataset
@@ -74,23 +75,34 @@ def main():
     num_steps = num_rows % 4
 
     # -------------------------------------------------------------------------
-    # 4. Load model and tokenizer
+    # 4. Load model and tokenizer with patched rope_scaling
     # -------------------------------------------------------------------------
-    rope_scaling = None
-    if args.rope_scaling_type and args.rope_scaling_factor:
-        rope_scaling = {
-            "type": args.rope_scaling_type,
-            "factor": args.rope_scaling_factor
-        }
-
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_token)
+
+        config = AutoConfig.from_pretrained(model_name, token=hf_token)
+
+        # Patch RoPE scaling if CLI args provided or if loaded config is invalid
+        if args.rope_scaling_type and args.rope_scaling_factor:
+            config.rope_scaling = {
+                "type": args.rope_scaling_type,
+                "factor": args.rope_scaling_factor
+            }
+        elif hasattr(config, "rope_scaling"):
+            rs = config.rope_scaling
+            if isinstance(rs, dict):
+                # Only keep the allowed fields
+                config.rope_scaling = {
+                    "type": rs.get("type", "dynamic"),
+                    "factor": rs.get("factor", 8.0)
+                }
+
         base_model = AutoModelForCausalLM.from_pretrained(
             model_name,
+            config=config,
             device_map="auto",
             token=hf_token,
-            torch_dtype=torch.float16,
-            rope_scaling=rope_scaling
+            torch_dtype=torch.float16
         )
     except Exception as e:
         print(f"ERROR: Failed to download or load the model '{model_name}'.")
