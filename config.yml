@@ -1,306 +1,160 @@
-## Configuration
-#
-# Data files and directories
-#
-directories:
-  papers:   _PAPERS       # Where PDF documents reside.
-  json:     _JSON         # Where the parsed JSON files are stored.
-  mcq:      _MCQ          # Where your MCQ processing code will read/write.
-  results: _RESULTS       # Where final results will be stored.
+#!/usr/bin/env python
 
-# Model Defaults
-#
-timeout:    45            # model query timeout
+# rocm_lora_fine_tune - runs on AMD/ROCm GPU systems like Lumi
 
-# HTTP client settings
-http_client:
-  connect_timeout: 3.05    # connection timeout in seconds
-  read_timeout: 10         # read timeout in seconds
-  max_retries: 1           # maximum number of retries for HTTP requests
-  pool_connections: 1      # connection pool size
-  pool_maxsize: 1          # maximum pool size
-
-# Models 
-# temperature, base model, tokenizer applied to whatever model is specified
-# on the command line. Model name below is used if no model is specified on 
-# the comment line.
-#
-
-model_type_endpoints:
-  openai:   "https://api.openai.com/v1"
-  argo:     "https://apps.inside.anl.gov/argoapi/api/v1/resource/chat"
-  argo_dev: "https://apps-dev.inside.anl.gov/argoapi/api/v1/resource/chat"
-
-# this model is the default for Model-A for score_answers.py
-model:
-  #name:        "openai:gpt-4.1-mini"
-  name:        "cels:scout"
-  #name:        "argo:gpt4large"
-  temperature:  0.7  
-  baseModel:   "None"
-  Tokenizer:   "None"
-
-# model-B for score_answers.py
-# model-B also the model whose knowledge is tested w.r.t. factoid nuggets
-#         (Temperature=0 is recommended for knowledge testing)
-
-model_b:
-  name:        "cels:scout"
-    #name:         "openai:gpt-4.1-nano"
-  #name:         "argo:gpt4"
-  temperature:   0.0
-  baseModel:    "None"
-  Tokenizer:    "None"
-
-model_c:
- # name:         "argo:gpt35"
-  #name:        "alcf:meta-llama/Meta-Llama-3-8B-Instruct"
-  temperature:  0.7
-  baseModel:   "None"
-  Tokenizer:   "None"
-
-model_d:
-  #name:        "alcf:mistralai/Mistral-7B-Instruct-v0.3"
- # name:         "argo:gpt4turbo"
-  temperature:  0.7
-  baseModel:   "None"
-  Tokenizer:   "None"
-
-# Argo API configuration
-argo:
-  username_file: secrets.yml  # Path to secrets file containing Argo credentials
+import argparse
+import os
+from trl import SFTTrainer
+from transformers import (
+    TrainingArguments,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    AutoConfig
+)
+from peft import get_peft_model, LoraConfig, TaskType
+from datasets import load_dataset
+from huggingface_hub import login
 
 
-# Other MCQ-related parameters
+def main():
+    parser = argparse.ArgumentParser(
+        description="Train a LoRA adapter on a given JSON dataset, then merge and save."
+    )
+    parser.add_argument(
+        '-d', "--dataset_file", type=str, required=True,
+        help="Path to the JSON file containing the dataset."
+    )
+    parser.add_argument(
+        '-o', "--output_dir", type=str, required=True,
+        help="Output directory for saving the final model."
+    )
+    parser.add_argument(
+        '--model-name', type=str, default="meta-llama/Llama-3.1-8B",
+        help="Model name to load from Hugging Face hub."
+    )
+    args = parser.parse_args()
 
-quality:
-  minScore:         7
-  chunkSize:     1000  # For generate_mcqs chunking json files for mcqs
-  save_interval:   50  # For parallel_generate_answers.py and parallel_score_answers- how
-                       # many QA pairs to process before updating resutls file)
-  defaultThreads:   4  # default n-way parallel, can override with -p/--parallel
- 
+    dataset_file = args.dataset_file
+    output_dir = args.output_dir
+    model_name = args.model_name
 
-####### ABOUT CHANGING THESE PROMPTS #######
-## NOTE: Python's str.format() treats any single braces {...} as placeholders.
-# If you need a literal brace in your prompt (e.g., "\[ \boxed{3} \]"),
-# you must double them like "\[ \boxed{{3}} \]". 
-# ALSO: avoid putting placeholders in single quotes, as that can trigger KeyError.
-#
-# ----------------------------------------------------------------
-#
-# Prompts for generate_mcqs.py
-# 
-# Iteration with model to generate MCQ Q/A pairs
-#
-#
-## Prompts for generate_mcqs.py
-# 
-# Iteration with model to generate MCQ Q/A pairs
-#
+    # -------------------------------------------------------------------------
+    # 1. Log in to Hugging Face
+    # -------------------------------------------------------------------------
+    hf_token = os.getenv("HUGGINGFACE_TOKEN")
+    if not hf_token:
+        print("ERROR: HUGGINGFACE_TOKEN environment variable is not set.")
+        return
+    login(hf_token)
 
-prompts:
+    # -------------------------------------------------------------------------
+    # 2. Configure distributed training if needed
+    # -------------------------------------------------------------------------
+    if "RANK" not in os.environ or "MASTER_ADDR" not in os.environ:
+        print("⚠️  No distributed training environment detected — falling back to single-node mode.")
+        os.environ["RANK"] = "0"
+        os.environ["WORLD_SIZE"] = "1"
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "29500"
 
-  # Step 1
-  system_message: |
-    You are a helpful assistant that summarizes text in bullet points and expands on them using your broader knowledge. Name this result 'augmented_chunk'.
-  user_message: |
-    Given the following chunk of text, please:
+    # -------------------------------------------------------------------------
+    # 3. Load dataset
+    # -------------------------------------------------------------------------
+    dataset = load_dataset("json", data_files=dataset_file, split="train")
+    num_rows = dataset.num_rows
+    print(f"Number of rows: {num_rows}")
+    num_steps = max(1, num_rows // 4)
 
-    1. Summarize the text in bullet points.
-    2. Expand on the summary using your parametric knowledge to create a 80-100 word synopsis of the chunk.
+    # -------------------------------------------------------------------------
+    # 4. Load model and tokenizer without RoPE modifications
+    # -------------------------------------------------------------------------
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_token)
+        config = AutoConfig.from_pretrained(model_name, token=hf_token)
 
-    Chunk:
-    {chunk}
+        # Remove any existing rope_scaling to use default RoPE
+        if hasattr(config, "rope_scaling"):
+            delattr(config, "rope_scaling")
 
-    Return the result as a JSON object with key 'augmented_chunk' and the value should be your bullet points and comments.  The comments should be no longer than 100 words and should not include your reasoning narrative.
+        base_model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            config=config,
+            device_map="auto",
+            token=hf_token,
+            torch_dtype=torch.float16
+        )
+    except Exception as e:
+        print(f"ERROR: Failed to download or load the model '{model_name}'.")
+        print(f"Details: {e}")
+        return
 
-  # Step 4: Atomic fact extraction (for identifying novel facts)
-  fact_extraction_system: |
-    You are a precise fact extractor that identifies atomic, verifiable factual statements in scientific text.
-    An atomic fact is a single, standalone claim that can be verified as true or false.
-    Focus on extracting specific claims, findings, methodologies, and results.
-    Return your output in a structured JSON format.
+    tokenizer.add_special_tokens({"pad_token": "<|reserved_special_token_0|>"})
+    base_model.config.pad_token_id = tokenizer.pad_token_id
+    tokenizer.padding_side = "right"
 
-  fact_extraction_user: |
-    Extract atomic factual statements expressed or implied in this text:
+    # -------------------------------------------------------------------------
+    # 5. Create and wrap PEFT LoRA model
+    # -------------------------------------------------------------------------
+    lora_config = LoraConfig(
+        r=16,
+        target_modules=["q_proj", "v_proj"],
+        task_type=TaskType.CAUSAL_LM,
+        lora_alpha=32,
+        lora_dropout=0.05
+    )
+    peft_model = get_peft_model(base_model, lora_config)
 
-    {chunk}
+    # -------------------------------------------------------------------------
+    # 6. Train with SFTTrainer
+    # -------------------------------------------------------------------------
+    trainer = SFTTrainer(
+        model=peft_model,
+        train_dataset=dataset,
+        tokenizer=tokenizer,
+        args=TrainingArguments(
+            per_device_train_batch_size=4,
+            gradient_accumulation_steps=4,
+            warmup_steps=10,
+            max_steps=num_steps,
+            bf16=True,
+            logging_steps=1,
+            output_dir="SFT-outputs",
+            optim="adamw_torch",
+            seed=3407,
+        ),
+    )
 
-    For each fact, provide:
-    1. The specific claim as a single complete sentence
-    2. The text span it was derived from (exact quote from the source)
-    3. Your confidence (0.0-1.0) that this is a factual statement
+    trainer.train()
 
-    Return as a JSON array of objects with these exact keys:
-    - "claim": The specific factual statement
-    - "span": The source text span this is derived from
-    - "confidence": Your confidence score (0.0-1.0)
+    # -------------------------------------------------------------------------
+    # 7. Save adapter and tokenizer
+    # -------------------------------------------------------------------------
+    peft_model.save_pretrained(output_dir, save_adapter=True, save_config=True)
+    tokenizer.save_pretrained(output_dir)
 
-    IMPORTANT GUIDELINES:
-    - Extract 3-7 key facts from this text
-    - Focus on specific, technical claims rather than general statements
-    - Aim for high precision - only include clearly factual statements
-    - Return valid JSON that can be parsed directly
+    # -------------------------------------------------------------------------
+    # 8. Merge LoRA weights with base model
+    # -------------------------------------------------------------------------
+    try:
+        merged = peft_model.merge_and_unload()
+        merged.save_pretrained(output_dir, save_method="merged_16bit")
+        tokenizer.save_pretrained(output_dir)
+    except Exception as e:
+        print("WARNING: Failed to merge LoRA weights with base model.")
+        print(f"Details: {e}")
 
-  # For fact deduplication and similarity comparison
-  fact_comparison_system: |
-    You are a precise semantic comparison assistant. Compare two factual statements and determine their semantic similarity.
-    Return a JSON object with two fields:
-    - similarity_score: float between 0 and 1
-    - reasoning: brief explanation of the similarity or differences
+    # -------------------------------------------------------------------------
+    # 9. Push to Hugging Face Hub (optional)
+    # -------------------------------------------------------------------------
+    try:
+        repo_id = "ianfoster/" + os.path.basename(output_dir)
+        merged.push_to_hub(repo_id)
+        tokenizer.push_to_hub(repo_id)
+    except Exception as e:
+        print("NOTE: Skipping Hugging Face push (optional).")
+        print(f"Details: {e}")
 
-  fact_comparison_user: |
-    Compare these two factual statements and determine if they express the same information:
-    
-    Fact 1: {fact1}
-    Fact 2: {fact2}
-    
-    Return a similarity score (0-1) where:
-    1.0 = identical meaning
-    0.8-0.99 = same core fact with minor differences
-    0.5-0.79 = partially overlapping information
-    0.0-0.49 = different facts
 
-  evaluate_known_facts_system: |
-    You are a fact-checking assistant that assesses the validity of factual claims.
-    You evaluate if you already know these facts based on your pretraining. 
-    You provide a True or False answer for each fact, with True indicating you already know the fact and False indicating you do not.
-    Return your assessment in a structured JSON format.
-
-  evaluate_known_facts_user: |
-    Which of the following claims do you already know based on your pretraining? 
-    
-    Claims to evaluate:
-    {claims_json}
-
-  # Step 5: Fact validation (to assess if facts are actually valid claims)
-  fact_validation_system: |
-    You are a fact-checking assistant that assesses the validity of factual claims.
-    You evaluate how precise, accurate, and well-supported each claim is based on the provided evidence.
-    You provide clear confidence scores based on factual validity.
-    Return your assessment in a structured JSON format.
-
-  fact_validation_user: |
-    Carefully assess each of the following factual claims extracted from a scientific text.
-    For each claim, evaluate:
-    1. Is it a precise, specific statement that could be verified?
-    2. Is it properly supported by the provided span of text?
-    3. Is it formulated as a clear, standalone fact?
-
-    Claims to evaluate:
-    {claims_json}
-
-    For each claim, provide:
-    - Revised claim text (if needed for clarity/precision)
-    - Adjusted confidence score (0.0-1.0)
-    - Brief reason for your assessment
-
-    Return as a JSON array maintaining the same structure as the input, but with potentially revised claims and confidence scores.
-  # Step 2
-  system_message_2: |
-    You are a helpful assistant that generates exactly ONE multiple-choice question based on the provided text (augmented_chunk). The question must have {num_answers} possible answers, numbered 1 to {num_answers}. Exactly one of these {num_answers} choices is correct. Mark the correct choice with '(*)' at the end for later grading.
-  user_message_2: |
-    Below is some content called augmented_chunk.
-    Please:
-    1) Create exactly one multiple-choice question that can be answered by the augmented_chunk.
-    2) Provide {num_answers} distinct options (1 to {num_answers}) as answers.
-    3) Mark the correct answer with '(*)' at the end of that particular option.
-
-    Constraints:
-    - The question and answers must be self-contained and understandable without referencing the chunk.
-    - Do not mention 'chunk' or 'augmented_chunk' or 'article' or 'study' in the final output.
-
-    augmented_chunk:
-    {augmented_chunk}
-
-  # Step 3
-  system_message_3: |
-    You are a helpful assistant that evaluates how well an answer matches the question in context of the augmented_chunk. Return your evaluation strictly as valid JSON with no additional text, with precisely three key-value pairs: answer, score, and comment. No additional formatting or text should be included, just these three key-value pairs in valid JSON format.
-  user_message_3: |
-    augmented_chunk:
-    {augmented_chunk}
-
-    question:
-    {generated_question}
-
-    Please provide, in JSON format:
-    1. An appropriate answer to the multiple-choice question above. Report in JSON as the value for the key 'answer'.
-    2. A single integer 'score' from 1 to 10 for how well the answer addresses the question based on the augmented_chunk. Report in JSON as the value for the key 'score'.
-    3. A brief comment explaining why this answer is correct. Report in JSON as the value for the key 'comment'.
-
-    Return a valid JSON object containing exactly three keys: 'answer', 'score', and 'comment'.
-
-#
-# Prompts for score_answers.py
-#
-scoring_prompts:
-  main_system: "You are a strict grader. Respond with only the number."
-  main_prompt: |
-    You are a strict grader.
-
-    Question: {question}
-    Reference Answer: {reference_answer}
-    User's Answer: {user_answer}
-
-    On a scale of 1 to 10 (10 = exactly matches the reference answer, 1 = completely incorrect), provide ONLY the numeric score that reflects how well the User's Answer matches the Reference Answer. Provide just a number.
-  fallback_system: "Extract a single number"
-  fallback_prompt: |
-    Extract a final answer from this user response. Sometimes this appears at the end after the words "**Final Answer**", enclosed in the characters "[ \\boxed{{" and "}} ]".
-    For example, "[ \\boxed{{3}} ]" for the answer "3".
-
-    Here is the user response:
-    {user_answer}
-
-#
-# Prompts for generate_nugget.py
-#
-nugget_prompts:
-  # Step 1: Metadata extraction
-  metadata_system: |
-    You are a helpful assistant that extracts paper metadata. 
-    Focus on finding the exact paper identifiers, title, and first author.
-    Look specifically for arXiv IDs, DOIs, or other unique identifiers.
-    Return the information in a specific JSON format.
-
-  metadata_user: |
-    From this text, extract:
-    1. Any paper identifiers (arXiv ID, DOI) that appear in the text
-    2. The complete paper title
-    3. The first author's full name
-
-    Return as a JSON object with "identifiers" (array), "title", and "first_author".
-    If you cannot find any field with certainty, use null.
-
-    Text:
-    {chunk}
-
-  # Step 2: DOI lookup
-  doi_system: |
-    You are a helpful assistant that finds DOIs for academic papers.
-    You have access to academic paper databases.
-    Only return a DOI if you are certain it matches both the title and first author exactly.
-
-  doi_user: |
-    Find the exact DOI for this academic paper:
-    Title: {title}
-    First Author: {first_author}
-
-    The paper appears to be about pervasive machine learning for HPC.
-    Return ONLY the DOI string. If you cannot find an exact match, return null.
-
-  # Step 3: Augmented chunk generation (same as generate_mcqs.py Step 1)
-  system_message: |
-    You are a helpful assistant that summarizes text in bullet points and expands on them using your broader knowledge. Name this result 'augmented_chunk'.
-
-  user_message: |
-    Given the following chunk of text, please:
-
-    1. Summarize the text in bullet points.
-    2. Expand on the summary using your parametric knowledge to create a 80-100 word synopsis of the chunk.
-
-    Chunk:
-    {chunk}
-
-    Return the result as a JSON object with key 'augmented_chunk' and the value should be your bullet points and comments.  The comments should be no longer than 100 words and should not include your reasoning narrative.
+if __name__ == "__main__":
+    main()
 
