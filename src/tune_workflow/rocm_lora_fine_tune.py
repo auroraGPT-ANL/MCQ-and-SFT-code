@@ -17,9 +17,17 @@ from huggingface_hub import login
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train a LoRA adapter on a given JSON dataset, then merge and save.")
-    parser.add_argument('-d', "--dataset_file", type=str, required=True, help="Path to the JSON file containing the dataset (e.g. text.json).")
-    parser.add_argument('-o', "--output_dir", type=str, required=True, help="Output directory for saving the final model.")
+    parser = argparse.ArgumentParser(
+        description="Train a LoRA adapter on a given JSON dataset, then merge and save."
+    )
+    parser.add_argument(
+        '-d', "--dataset_file", type=str, required=True,
+        help="Path to the JSON file containing the dataset (e.g. text.json)."
+    )
+    parser.add_argument(
+        '-o', "--output_dir", type=str, required=True,
+        help="Output directory for saving the final model."
+    )
     args = parser.parse_args()
 
     dataset_file = args.dataset_file
@@ -38,15 +46,15 @@ def main():
     # 1.5 Configure distributed training if needed
     # -------------------------------------------------------------------------
     if "RANK" not in os.environ or "MASTER_ADDR" not in os.environ:
-        print("⚠️  No distributed training environment detected — falling back to single-node mode.")
+        print(
+            "⚠️  No distributed training environment detected — falling back to single-node mode."
+        )
         os.environ["RANK"] = "0"
         os.environ["WORLD_SIZE"] = "1"
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "29500"
 
-
     model_name = "meta-llama/Llama-3.1-8B-Instruct"
-
     max_seq_length = 2048
 
     # -------------------------------------------------------------------------
@@ -58,14 +66,16 @@ def main():
     num_steps = num_rows % 4
 
     # -------------------------------------------------------------------------
-    # 3. Load model and tokenizer (no quantization)
+    # 3. Load model and tokenizer with default rope_scaling
     # -------------------------------------------------------------------------
     try:
-        tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_token)
+        tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=hf_token)
+        # no override: use model's default RoPE settings
         base_model = AutoModelForCausalLM.from_pretrained(
             model_name,
             device_map="auto",
-            token=hf_token
+            use_auth_token=hf_token,
+            torch_dtype=torch.float16
         )
     except Exception as e:
         print(f"ERROR: Failed to download or load the model '{model_name}'.")
@@ -121,7 +131,7 @@ def main():
     # -------------------------------------------------------------------------
     try:
         model_to_merge = peft_model.from_pretrained(
-            AutoModelForCausalLM.from_pretrained(model_name, token=hf_token).to("cuda"),
+            AutoModelForCausalLM.from_pretrained(model_name, use_auth_token=hf_token).to("cuda"),
             output_dir
         )
         merged_model = model_to_merge.merge_and_unload()
