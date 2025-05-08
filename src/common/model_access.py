@@ -31,6 +31,8 @@ from common.exceptions import APITimeoutError
 from common.alcf_inference_utilities import get_names_of_alcf_chat_models
 from test.test_model import TestModel  # local stub for offline testing
 
+import torch
+
 # ---------------------------------------------------------------------------
 # Local aliases for readability 
 # ---------------------------------------------------------------------------
@@ -60,7 +62,7 @@ class Model:
 
     # Core Methods
     # -----------------------------------------------------------------------
-    def __init__(self, model_name: str, parallel_workers: int = None):
+    def __init__(self, model_name: str, parallel_workers: int = None, device_map: Any = None):
         self.model_name = model_name
         self.parallel_workers = parallel_workers
         self.base_model: Any | None = None
@@ -105,18 +107,17 @@ class Model:
 
         elif model_name.startswith("cels:"):
             self._init_cels_model(model_name)
-
         elif model_name.startswith("openai:"):
             self._init_openai_model(model_name)
-
-        elif model_name.startswith("cels:"):
-            self._init_cels_model(model_name)
 
         elif model_name.startswith("argo:") or model_name.startswith("argo-dev:"):
             self._init_argo_model(model_name)
 
         elif model_name.startswith("test:"):
             self._init_test_model(model_name)
+
+        elif model_name.startswith("bsc:"):
+            self._init_bsc_model(model_name)        
 
         else:
             logger.error(f"Unrecognised model specifier: {model_name}")
@@ -253,6 +254,38 @@ class Model:
         self.temperature = 0.0
         self.test_model = TestModel(self.model_name)
         logger.info(f"Loaded TestModel stub ({self.model_name})")
+
+    
+    def _init_bsc_model(self, model_name: str, device_map: Any = None):
+        # strip off the "bsc:" prefix to get the folder name
+        self.model_name = model_name.split("bsc:", 1)[1]
+        self.model_type = "Huggingface"
+        self.temperature = 0.0
+
+        # path to your local model directory
+        model_dir = os.path.join(config.bsc_model_root, self.model_name)
+        logger.info(f"Loading BSC model from {model_dir}")
+
+        # no endpoint or credentials needed
+        self.endpoint = None
+        self.key = None
+
+
+        # load tokenizer & model onto GPU(s)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_dir)
+        self.base_model = AutoModelForCausalLM.from_pretrained(
+            model_dir,
+            device_map=device_map or "auto",    # auto-shard or pin to provided map
+            torch_dtype=torch.float16          # use FP16 to save memory
+        )
+
+        # ensure pad/eos tokens are set
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.base_model.config.pad_token_id = self.tokenizer.pad_token_id
+        self.tokenizer.padding_side = "right"
+
+        
 
     # -----------------------------------------------------------------------
     #  PBS helper methods 
@@ -531,23 +564,24 @@ class Model:
         except Exception as e:
             return self._handle_api_error(e)
 
+
 def run_hf_model(input_text, base_model, tokenizer):
     """
-    Generate text from a local HF model.
-    Example usage for demonstration purposes only.
+    Generate text from a local HF model, then format as {"augmented_chunk": ...}.
+    Includes fallback scoring logic if JSON parse fails.
     """
     if base_model is None or tokenizer is None:
-        return "HF model or tokenizer not loaded."
+        return json.dumps({"augmented_chunk": "HF model or tokenizer not loaded."})
 
     inputs = tokenizer(input_text, return_tensors="pt", padding=True)
-    input_ids = inputs["input_ids"].to("cuda")
-    attention_mask = inputs["attention_mask"].to("cuda")
+    device = next(base_model.parameters()).device
+    inputs = {k: v.to(device) for k, v in inputs.items()}
 
-    output = base_model.generate(
-        input_ids,
-        attention_mask=attention_mask,
-        max_length=512,
-        pad_token_id=tokenizer.pad_token_id
+    output_ids = base_model.generate(
+        inputs["input_ids"],
+        attention_mask=inputs.get("attention_mask"),
+        max_new_tokens=512,
+        pad_token_id=tokenizer.pad_token_id,
     )
-    generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
-    return generated_text
+    raw_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+    return raw_text

@@ -70,6 +70,8 @@ model_d:
 argo:
   username_file: secrets.yml  # Path to secrets file containing Argo credentials
 
+bsc:
+  model_root: /gpfs/projects/bsc88/hf-models
 
 # Other MCQ-related parameters
 
