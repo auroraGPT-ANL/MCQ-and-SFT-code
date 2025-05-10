@@ -20,7 +20,7 @@ dependencies:
  - jq
  - pytorch
  - torchvision
- - torchaudio 
+ - torchaudio
  - pip:
    - huggingface_hub
    - transformers
@@ -85,7 +85,6 @@ dependencies:
    - wrapt==1.17.2
    - trl
    - peft
-   - bitsandbytes
    - accelerate==1.6.0
    - aiohappyeyeballs==2.6.1
    - aiohttp==3.11.18
@@ -138,20 +137,25 @@ dependencies:
    - nest-asyncio==1.6.0
    - networkx==3.4.2
    - nltk==3.9.1
-   - nvidia-cublas-cu12==12.6.4.1
-   - nvidia-cuda-cupti-cu12==12.6.80
-   - nvidia-cuda-nvrtc-cu12==12.6.77
-   - nvidia-cuda-runtime-cu12==12.6.77
-   - nvidia-cudnn-cu12==9.5.1.17
-   - nvidia-cufft-cu12==11.3.0.4
-   - nvidia-cufile-cu12==1.11.1.6
-   - nvidia-curand-cu12==10.3.7.77
-   - nvidia-cusolver-cu12==11.7.1.2
-   - nvidia-cusparse-cu12==12.5.4.2
-   - nvidia-cusparselt-cu12==0.6.3
-   - nvidia-nccl-cu12==2.26.2
-   - nvidia-nvjitlink-cu12==12.6.85
-   - nvidia-nvtx-cu12==12.6.77
+   #
+   ## commented out NVIDIA packages for MacOS version
+   #
+   #- bitsandbytes
+   #- nvidia-cublas-cu12==12.6.4.1
+   #- nvidia-cuda-cupti-cu12==12.6.80
+   #- nvidia-cuda-nvrtc-cu12==12.6.77
+   #- nvidia-cuda-runtime-cu12==12.6.77
+   #- nvidia-cudnn-cu12==9.5.1.17
+   #- nvidia-cufft-cu12==11.3.0.4
+   #- nvidia-cufile-cu12==1.11.1.6
+   #- nvidia-curand-cu12==10.3.7.77
+   #- nvidia-cusolver-cu12==11.7.1.2
+   #- nvidia-cusparse-cu12==12.5.4.2
+   #- nvidia-cusparselt-cu12==0.6.3
+   #- nvidia-nccl-cu12==2.26.2
+   #- nvidia-nvjitlink-cu12==12.6.85
+   #- nvidia-nvtx-cu12==12.6.77
+   #- triton==3.3.0
    - orjson==3.10.18
    - pandas==2.2.3
    - platformdirs==4.3.7
@@ -174,7 +178,6 @@ dependencies:
    - tiktoken==0.9.0
    - tokenizers==0.21.1
    - torch==2.7.0
-   - triton==3.3.0
    - typing-inspect==0.9.0
    - xxhash==3.5.0
    - yarl==1.20.0
