@@ -56,7 +56,6 @@ class Model:
     _api_error_counts = {
         'OpenAI': 0,
         'Argo': 0,
-        'CAFE': 0
     }
     _error_count_lock = threading.Lock()  # Lock for thread-safe counter updates
 
@@ -102,11 +101,9 @@ class Model:
         elif model_name.startswith("alcf:"):
             self._init_alcf_model(model_name)
 
-        elif model_name.startswith("cafe:"):
-            self._init_cafe_model(model_name)
-
         elif model_name.startswith("cels:"):
             self._init_cels_model(model_name)
+
         elif model_name.startswith("openai:"):
             self._init_openai_model(model_name)
 
@@ -180,13 +177,6 @@ class Model:
         self.key = token
         logger.info(f"ALCF model selected: {self.model_name}")
 
-    # "cafe:<model>" - Rick's secret server
-    def _init_cafe_model(self, model_name: str):
-        self.model_name = model_name.split("cafe:")[1]
-        self.model_type = "CAFE"
-        self.endpoint = "https://195.88.24.64/v1"
-        self.key = "CELS"  # placeholder
-        logger.info(f"Cafe model: {self.model_name}")
 
     # "cels:<model>" - CELS models
     def _init_cels_model(self, model_name: str):
@@ -381,9 +371,6 @@ class Model:
             }
             return self._handle_api_model_request(user_prompt, system_prompt, temperature, extra_data)
 
-        elif self.model_type == 'CAFE':
-            return self._handle_api_model_request(user_prompt, system_prompt, temperature)
-
         elif self.model_type == 'Test':
             return self.test_model.generate_response(user_prompt, system_prompt)
 
@@ -529,7 +516,7 @@ class Model:
         return response_text
 
     def _handle_api_model_request(self, user_prompt: str, system_prompt: str, temperature: float, extra_data: dict = None) -> str:
-        """Common handler for API-based models (vLLM, Argo, CAFE)"""
+        """Common handler for API-based models (vLLM, Argo)"""
         data = self._format_chat_request(user_prompt, system_prompt, temperature)
         if extra_data:
             data.update(extra_data)
