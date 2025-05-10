@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """
 generate_answers.py
 
@@ -10,6 +9,7 @@ import json
 import time
 import argparse
 import logging
+import json
 import concurrent.futures
 from typing import Union, List
 from tqdm import tqdm
@@ -18,29 +18,39 @@ from common import config
 from common.model_access import Model
 
 
-def process_qa_item(qa_item, index, model):
+def process_mcq_item(mcq_item, index, model):
     """
     Process a single QA pair:
-      - Extract the question and reference answer.
-      - Use the model to generate an answer.
+      - Extract the question and multiple choice answers
+      - Use the model to select one f the answers
       - Compute the generation time.
-      - Return a tuple (index, result) with the updated QA data.
+      - Return a tuple (index, result) with the updated MCQ data.
     """
-    question = qa_item.get("question", "")
-    reference_answer = qa_item.get("answer", "")
-    filename = qa_item.get("file", "")
-    filenum = qa_item.get("filenum", "")
-    chunknum = qa_item.get("chunknum", "")
 
-    if not question or not reference_answer:
-        config.logger.info(f"Item {index} missing question or reference answer; skipping.")
+    question = mcq_item.get("question", "")
+    choices = mcq_item.get("choices", "")
+    reference_answer = mcq_item.get("reference_answer", "")
+    filename = mcq_item.get("file", "")
+    filenum = mcq_item.get("filenum", "")
+    chunknum = mcq_item.get("chunknum", "")
+
+    if not question or not choices or not reference_answer:
+        config.logger.info(f"Item {index} missing question, choices, or reference answer; skipping.")
         return (index, None)
 
     start_time = time.time()
+
+    user_message = config.user_message_mcq_answer.format(num_answers=7, question=question, choices=choices)
+
     try:
-        model_answer = model.run(question)
+        model_answer = model.run(user_prompt=user_message, system_prompt=config.system_message_mcq_answer)
+        cleaned = model_answer.replace("```json", "").replace("```", "").strip()
+        model_answer2 = json.loads(cleaned)
+        answer = model_answer2['answer']
+        #comment = model_answer2['comment']
     except Exception as e:
         config.logger.error(f"Error processing item {index}: {e}")
+        print('ERROR', model_answer)
         return (index, None)
     gen_time = time.time() - start_time
 
@@ -50,8 +60,12 @@ def process_qa_item(qa_item, index, model):
         'chunknum': chunknum,
         'gen_time': f'{gen_time:.3f}',
         'question': question,
-        'reference': reference_answer,
-        'model': model_answer
+	'choices': choices,
+        'model_answer': answer,
+        'reference_answer': reference_answer,
+        'answers_match': answer == int(reference_answer),
+        #'comment': comment,
+        'model': f'{model.model_type}:{model.model_name}'
     }
     return (index, result)
 
@@ -165,8 +179,8 @@ def generate_answers_file(
     with open(output_path, 'a', encoding='utf-8') as out_f:
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
-                executor.submit(process_qa_item, qa, idx, model): idx
-                for idx, qa in enumerate(slice_data, start=1)
+                executor.submit(process_mcq_item, mcq, idx, model): idx
+                for idx, mcq in enumerate(slice_data, start=1)
             }
             for fut in concurrent.futures.as_completed(futures):
                 idx, res = fut.result()
@@ -196,7 +210,7 @@ def main():
     parser.add_argument('-s','--start',    type=int, default=0)
     parser.add_argument('-e','--end',      default='all')
     parser.add_argument('-c','--cache-dir',default=os.getenv('HF_HOME'))
-    parser.add_argument('-i','--input',    default=None)
+    parser.add_argument('-i','--input',    default=None, help='JSON or JSONL file')
     parser.add_argument('-o','--output',   default=None)
     parser.add_argument('-p','--parallel', type=int, default=config.defaultThreads)
     parser.add_argument('-q','--quiet',    action='store_true')

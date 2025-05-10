@@ -24,7 +24,6 @@ http_client:
 # temperature, base model, tokenizer applied to whatever model is specified
 # on the command line. Model name below is used if no model is specified on 
 # the comment line.
-#
 
 model_type_endpoints:
   openai:   "https://api.openai.com/v1"
@@ -34,7 +33,8 @@ model_type_endpoints:
 # this model is the default for Model-A for score_answers.py
 model:
   #name:        "openai:gpt-4.1-mini"
-  name:        "cels:scout"
+  name: "cels:locallama"
+  #name:        "cels:scout"
   #name:        "argo:gpt4large"
   temperature:  0.7  
   baseModel:   "None"
@@ -45,7 +45,8 @@ model:
 #         (Temperature=0 is recommended for knowledge testing)
 
 model_b:
-  name:        "cels:scout"
+  name: "cels:locallama"
+  #name:        "cels:scout"
     #name:         "openai:gpt-4.1-nano"
   #name:         "argo:gpt4"
   temperature:   0.0
@@ -53,6 +54,7 @@ model_b:
   Tokenizer:    "None"
 
 model_c:
+  name: "cels:CePO"
  # name:         "argo:gpt35"
   #name:        "alcf:meta-llama/Meta-Llama-3-8B-Instruct"
   temperature:  0.7
@@ -86,25 +88,19 @@ quality:
 # If you need a literal brace in your prompt (e.g., "\[ \boxed{3} \]"),
 # you must double them like "\[ \boxed{{3}} \]". 
 # ALSO: avoid putting placeholders in single quotes, as that can trigger KeyError.
+
+#=================================================================================
 #
-# ----------------------------------------------------------------
+# Prompts for generate_mcqs.py, which uses a model to generate MCQs from text
 #
-# Prompts for generate_mcqs.py
-# 
-# Iteration with model to generate MCQ Q/A pairs
-#
-#
-## Prompts for generate_mcqs.py
-# 
-# Iteration with model to generate MCQ Q/A pairs
-#
+#=================================================================================
 
 prompts:
 
-  # Step 1
-  system_message: |
+  # ===== Step 1: Summarize text in bullet points and expand =====
+  system_message_1: |
     You are a helpful assistant that summarizes text in bullet points and expands on them using your broader knowledge. Name this result 'augmented_chunk'.
-  user_message: |
+  user_message_1: |
     Given the following chunk of text, please:
 
     1. Summarize the text in bullet points.
@@ -115,7 +111,7 @@ prompts:
 
     Return the result as a JSON object with key 'augmented_chunk' and the value should be your bullet points and comments.  The comments should be no longer than 100 words and should not include your reasoning narrative.
 
-  # Step 4: Atomic fact extraction (for identifying novel facts)
+  # ===== Step 4: Atomic fact extraction (for identifying novel facts) =====
   fact_extraction_system: |
     You are a precise fact extractor that identifies atomic, verifiable factual statements in scientific text.
     An atomic fact is a single, standalone claim that can be verified as true or false.
@@ -174,7 +170,7 @@ prompts:
     Claims to evaluate:
     {claims_json}
 
-  # Step 5: Fact validation (to assess if facts are actually valid claims)
+  # ===== Step 5: Fact validation (to assess if facts are actually valid claims) =====
   fact_validation_system: |
     You are a fact-checking assistant that assesses the validity of factual claims.
     You evaluate how precise, accurate, and well-supported each claim is based on the provided evidence.
@@ -197,10 +193,11 @@ prompts:
     - Brief reason for your assessment
 
     Return as a JSON array maintaining the same structure as the input, but with potentially revised claims and confidence scores.
-  # Step 2
-  system_message_2: |
+
+  # ===== Step 2: Generate MCQ =====
+  system_message_mcq_2: |
     You are a helpful assistant that generates exactly ONE multiple-choice question based on the provided text (augmented_chunk). The question must have {num_answers} possible answers, numbered 1 to {num_answers}. Exactly one of these {num_answers} choices is correct. Mark the correct choice with '(*)' at the end for later grading.
-  user_message_2: |
+  user_message_mcq_2: |
     Below is some content called augmented_chunk.
     Please:
     1) Create exactly one multiple-choice question that can be answered by the augmented_chunk.
@@ -214,15 +211,42 @@ prompts:
     augmented_chunk:
     {augmented_chunk}
 
-  # Step 3
-  system_message_3: |
-    You are a helpful assistant that evaluates how well an answer matches the question in context of the augmented_chunk. Return your evaluation strictly as valid JSON with no additional text, with precisely three key-value pairs: answer, score, and comment. No additional formatting or text should be included, just these three key-value pairs in valid JSON format.
-  user_message_3: |
+  # ===== Step 3 for MCQs =====
+  system_message_mcq_3: |
+    You are a helpful assistant that evaluates a MCQ in the context of the augmented_chunk. 
+    You are to Evaluate the MCQ from the perspective of its suitability as an MCQ designed to evaluate an LLM,
+    and to return your evaluation strictly as valid JSON with no additional text, with precisely two key-value pairs.
+    No additional formatting or text should be included, just these two key-value pairs in valid JSON format.
+
+  user_message_mcq_3: |
     augmented_chunk:
     {augmented_chunk}
 
     question:
     {generated_question}
+
+    choices:
+    {generated_choices}
+
+    Please provide, in JSON format, an evaluation of the multiple-choice question above. Report in JSON with two key-value pairs:
+    1. One key-value pair with key 'score' and as value an integer in the range 1 to 10 indicating your rating of the MCQ.
+    2. A second key-value pair with key 'rationale' and as value a string justifying your assigned score
+    
+    Thus, you are to return a valid JSON object containing exactly two keys: 'score', and a numeric value; and 'rationale', and a string value.
+
+  # ===== Step 3 for QA pairs =====
+  system_message_qa_3: |
+    You are a helpful assistant that evaluates how well an answer matches the question in context of the augmented_chunk. Return your evaluation strictly as valid JSON with no additional text, with precisely three key-value pairs: answer, score, and comment. No additional formatting or text should be included, just these three key-value pairs in valid JSON format.
+
+  user_message_qa_3: |
+    augmented_chunk:
+    {augmented_chunk}
+
+    question:
+    {generated_question}
+
+    choices:
+    {generated_choices}
 
     Please provide, in JSON format:
     1. An appropriate answer to the multiple-choice question above. Report in JSON as the value for the key 'answer'.
@@ -231,12 +255,55 @@ prompts:
 
     Return a valid JSON object containing exactly three keys: 'answer', 'score', and 'comment'.
 
+
+#=================================================================================
+#
+# Prompts for generate_answers.py
+#
+#=================================================================================
+answering_prompts:
+  system_message_mcq_answer: |
+    You are a helpful assistant that answers a supplied multiple-choice question. You should return just the number of the best answer in a valid JSON document with key 'answer' and value the number. No additional formatting or text should be included.
+
+  user_message_mcq_answer: |
+    question:
+    {question}
+
+    choices:
+    {choices}
+
+    Please provide, in JSON format:
+    A number from 1 to {num_answers} representing the best answer to the multiple-choice question above. Provide a valid JSON object containing exactly one key, 'answer'. No additional formatting or text should be included.
+
+
+
+#=================================================================================
 #
 # Prompts for score_answers.py
 #
+#=================================================================================
 scoring_prompts:
-  main_system: "You are a strict grader. Respond with only the number."
-  main_prompt: |
+  main_mcq_system: "You are a strict grader. Respond only with 0 or 1."
+  main_mcq_prompt: |
+    You are a strict grader.
+    
+    Question: {question}
+    Reference Answer: {reference_answer}
+    User's Answer: {user_answer}
+
+    Return 1 if the reference answer is identical to the user's answer, and 0 otherwise. Provide just a 0 or a 1.
+
+  fallback_mcq_system: "Extract a single number and score based on that."
+  fallback_mcq_prompt: |
+    Extract a final answer from this user response. Sometimes this appears at the end after the words "**Final Answer**", enclosed in the characters "[ \\boxed{{" and "}} ]".
+    For example, "[ \\boxed{{3}} ]" for the answer "3".
+    Then compare the reference answer and the user answer, and return 1 if they are the same, and 0 if they are not.
+
+    Here is the user response:
+    {user_answer}
+
+  main_qa_system: "You are a strict grader. Respond with only the number."
+  main_qa_prompt: |
     You are a strict grader.
 
     Question: {question}
@@ -244,13 +311,15 @@ scoring_prompts:
     User's Answer: {user_answer}
 
     On a scale of 1 to 10 (10 = exactly matches the reference answer, 1 = completely incorrect), provide ONLY the numeric score that reflects how well the User's Answer matches the Reference Answer. Provide just a number.
-  fallback_system: "Extract a single number"
-  fallback_prompt: |
+
+  fallback_qa_system: "Extract a single number"
+  fallback_qa_prompt: |
     Extract a final answer from this user response. Sometimes this appears at the end after the words "**Final Answer**", enclosed in the characters "[ \\boxed{{" and "}} ]".
     For example, "[ \\boxed{{3}} ]" for the answer "3".
 
     Here is the user response:
     {user_answer}
+
 
 #
 # Prompts for generate_nugget.py

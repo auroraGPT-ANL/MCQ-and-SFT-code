@@ -16,7 +16,7 @@ Functions:
     robust_parse_json_output (response_text: str, model) -> dict:
     process_chunk            (model, filename, file_path, linenum, chunknum, chunk,
                               pbar_total, pbar_success, shared_counters, counter_lock):
-    merge_mcq_output         (out_file: str, new_qa_pairs: list) -> list:
+    merge_mcq_output         (out_file: str, new_mcqs: list) -> list:
     process_directory        (model, input_dir: str, output_dir: str = "output_files",
                               use_progress_bar: bool = True, parallel_workers: int = 4,
                               force: bool = False):
@@ -61,6 +61,50 @@ def load_file_lines(filepath: str) -> list:
             return [file.read()]
         else:
             return file.readlines()
+
+# Regex: captures leading number + dot, optional space, answer text, optional (*)
+CHOICE_PATTERN = re.compile(r"^(\d+)\.\s*(.+?)(\s*\(\*\))?\s*$")
+
+def _parse_model_output(raw: str, num_answers: int):
+    """Convert the LM's raw text into a record
+
+    Expected layout:
+    Question: …\n
+    1. Choice text …\n
+    2. Choice … (*)\n
+    etc.
+    """
+    # split into lines & strip empty
+    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+
+    # Heuristic: first line beginning with something other than a number is Q.
+    # If LM outputs "Question: …" remove the prefix.
+    question_line = lines.pop(0)
+    if question_line.lower().startswith("question:"):
+        question = question_line.split("question:", 1)[1].strip()
+    else:
+        question = question_line
+
+    choices: List[str] = []
+    reference_number: str | None = None
+
+    for line in lines:
+        m = CHOICE_PATTERN.match(line)
+        if not m:
+            # ignore lines that don't look like choices (footer, etc.)
+            continue
+        number, text, star = m.groups()
+        if star:
+            reference_number = number
+        choices.append(f"{number}. {text.strip()}")
+
+    if len(choices) != num_answers:
+        raise ValueError(f"Expected {num_answers} choices, got {len(choices)}: {choices}")
+    if reference_number is None:
+        raise ValueError("No correct choice marked with (*) in model output")
+
+    return question, choices, reference_number
+
 
 # quicker estimate of chunk count up front - saves 10-20s of startup and associated
 # user head-scratching before pbar is displayed
@@ -177,6 +221,7 @@ def robust_parse_json_output(response_text: str, model) -> dict:
     Robustly parse the JSON output from a model.
     If the initial attempt fails, log the error and use a fix prompt.
     """
+    print(f'ROBUST_PARSE {response_text}\nrrrrrr\n)
     cleaned = response_text.replace("```json", "").replace("```", "").strip()
     if cleaned.isdigit():
         return {"answer": "", "score": int(cleaned), "comment": ""}
@@ -227,19 +272,19 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
       1. Summarize & expand the chunk.
       2. Generate a multiple-choice question.
       3. Verify and score the result.
-    Returns a tuple: (filename, linenum, chunknum, QA pair dict (or None), success_flag)
+    Returns a tuple: (filename, linenum, chunknum, MCQ info (or None), success_flag)
     """
     if config.shutdown_event.is_set():
         return (filename, linenum, chunknum, None, False)
 
     config.logger.info(f"Processing chunk {chunknum} in file {filename}.")
-    qa_pair = None
+    mcq = None
     chunk_success = False
 
     # Step 1: Summarize & Expand.
     try:
-        step1_msg = config.user_message.format(chunk=chunk)
-        step1_output = model.run(user_prompt=step1_msg, system_prompt=config.system_message)
+        step1_msg = config.user_message_1.format(chunk=chunk)
+        step1_output = model.run(user_prompt=step1_msg, system_prompt=config.system_message_1)
         if config.shutdown_event.is_set():  # Check after model.run
             return (filename, linenum, chunknum, None, False)
         augmented_chunk = step1_output
@@ -261,14 +306,10 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
         return (filename, linenum, chunknum, None, False)
 
     # Step 2: Generate the MCQ.
-    #print('XXXXX step2')
     try:
-        step2_msg = config.user_message_2.format(augmented_chunk=augmented_chunk, num_answers=7)
-        #print(f'SSSSS:\n{step2_msg}\n-------ssssss')
-        #print(f'GGGGGaaaaaa:{config.system_message_2}\n----gggg')
-        #print(f'GGGGG:{config.system_message_2.format(num_answers=7)}\n----gggg')
-        generated_question = model.run(user_prompt=step2_msg, system_prompt=config.system_message_2.format(num_answers=7))
-        #print(f'{generated_question}\n=======ssssss')
+        step2_msg = config.user_message_mcq_2.format(augmented_chunk=augmented_chunk, num_answers=7)
+        
+        generated_question = model.run(user_prompt=step2_msg, system_prompt=config.system_message_mcq_2.format(num_answers=7))
         if config.shutdown_event.is_set():  # Check after model.run
             return (filename, linenum, chunknum, None, False)
     except Exception as e:
@@ -280,37 +321,46 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
         update_shared_counters(False, shared_counters, counter_lock)
         return (filename, linenum, chunknum, None, False)
 
+    (question, choices, reference_number) = _parse_model_output(generated_question, 7)
+
     # Step 3: Verify and Score the MCQ.
-    #print('YYYYY Step 3')
     try:
-        step3_msg = config.user_message_3.format(
+        step3_msg = config.user_message_mcq_3.format(
             augmented_chunk=augmented_chunk,
-            generated_question=generated_question
+            generated_question=question,
+            generated_choices=choices
         )
-        #print(f'MSG={step3_msg}\n-----')
-        step3_output = model.run(user_prompt=step3_msg, system_prompt=config.system_message_3)
-        #print(f'OUT={step3_output}\n=====')
+        print(f'STEP3 information:\n\tQUESTION: {question}\n\tCHOICES: {choices}\n\tANSWER: {reference_number}\n')
+        step3_output = model.run(user_prompt=step3_msg, system_prompt=config.system_message_mcq_3)
+        print(f'STEP3 output: {step3_output}\n-------\n')
         if config.shutdown_event.is_set():  # Check after model.run
             return (filename, linenum, chunknum, None, False)
         if step3_output is None:
             raise ValueError("model.run() returned None for step3_output.")
         step3_clean = step3_output.replace("```json", "").replace("```", "").strip()
-        parsed_json = robust_parse_json_output(step3_clean, model)
-        model_answer = str(parsed_json.get("answer", "")).strip()
+        #parsed_json = robust_parse_json_output(step3_clean, model)
+        parsed_json = step3_clean
+        print(f'PARSED_JSON: {parsed_json}\nppppppppp\n')
+        score = parsed_json['score']
+        rationale = parsed_json['rationale']
+        print('SS', score, rationale)
         model_score = parsed_json.get("score", 0)
+        print(f'STEP3 SCORE: {model_score}\n-------\n')
         pbar_total.set_postfix_str(f"Score: {model_score}")
-        #print('xxxx got score')
 
         if isinstance(model_score, int) and model_score > config.minScore:
             config.logger.info(f"MCQ generated for chunk {chunknum} in file {filename}, score {model_score} > {config.minScore}.")
-            qa_pair = {
+            mcq = {
                 "file": filename,
                 "path": file_path,
                 "line": linenum,
                 "chunk": chunknum,
                 "model": model.model_name,
-                "question": generated_question,
-                "answer": model_answer,
+                "question": question,
+                "choices": choices,
+                "reference_answer": reference_number,
+                "model_score": model_score, 
+                "rationale": rationale,
                 "text": augmented_chunk
             }
             chunk_success = True
@@ -326,12 +376,12 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
     update_shared_counters(chunk_success, shared_counters, counter_lock)
     if chunk_success:
         pbar_success.update(1)
-    return (filename, linenum, chunknum, qa_pair, chunk_success)
+    return (filename, linenum, chunknum, mcq, chunk_success)
 
 
-def merge_mcq_output(out_file: str, new_qa_pairs: list) -> list:
+def merge_mcq_output(out_file: str, new_mcqs: list) -> list:
     """
-    Merge new QA pairs with any existing MCQs in out_file using a unique MCQ identifier.
+    Merge new MCQs with any existing MCQs in out_file using a unique MCQ identifier.
     Returns a merged list of MCQ dictionaries.
     """
     existing_mcqs = []
@@ -350,10 +400,10 @@ def merge_mcq_output(out_file: str, new_qa_pairs: list) -> list:
                         continue
         except Exception as e:
             config.logger.info(f"Error reading existing file {out_file}: {e}")
-    for pair in new_qa_pairs:
-        mcq_id = (pair.get('file'), pair.get('line'), pair.get('chunk'), pair.get('model'))
+    for mcq in new_mcqs:
+        mcq_id = (mcq.get('file'), mcq.get('line'), mcq.get('chunk'), mcq.get('model'))
         if mcq_id not in existing_ids:
-            existing_mcqs.append(pair)
+            existing_mcqs.append(mcq)
             existing_ids.add(mcq_id)
     return existing_mcqs
 
@@ -459,13 +509,13 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
         processed_chunks = {}  # filename -> set of (linenum, chunknum)
         for future in futures:
             try:
-                fname, linenum, chunknum, qa_pair, success = future.result(timeout=75)
-                if qa_pair is not None:
+                fname, linenum, chunknum, mcq, success = future.result(timeout=75)
+                if mcq is not None:
                     chunk_id = (linenum, chunknum)
                     if fname not in processed_chunks:
                         processed_chunks[fname] = set()
                     if chunk_id not in processed_chunks[fname]:
-                        file_results.setdefault(fname, []).append(qa_pair)
+                        file_results.setdefault(fname, []).append(mcq)
                         processed_chunks[fname].add(chunk_id)
             except TimeoutError:
                 config.logger.info("Chunk processing task timed out after 75s")
@@ -485,24 +535,24 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
 
     # Write out MCQs for each file.
     os.makedirs(output_dir, exist_ok=True)
-    for fname, qa_pairs in file_results.items():
+    for fname, mcqs in file_results.items():
         base = os.path.splitext(fname)[0]
         out_file = os.path.join(output_dir, f'processed_{base}.jsonl')
         try:
             if force:
                 with config.output_file_lock:
                     with open(out_file, 'a', encoding='utf-8') as out_f:
-                        for mcq in qa_pairs:
+                        for mcq in mcqs:
                             out_f.write(json.dumps(mcq, ensure_ascii=False) + "\n")
-                new_count = len(qa_pairs)
+                new_count = len(mcqs)
             else:
-                merged = merge_mcq_output(out_file, qa_pairs)
+                merged = merge_mcq_output(out_file, mcqs)
                 with config.output_file_lock:
                     with open(out_file, 'w', encoding='utf-8') as out_f:
                         for mcq in merged:
                             out_f.write(json.dumps(mcq, ensure_ascii=False) + "\n")
-                new_count = len(qa_pairs)
-            config.logger.info(f"Wrote {len(qa_pairs)} MCQs to {out_file} ({new_count} new)")
+                new_count = len(mcqs)
+            config.logger.info(f"Wrote {len(mcqs)} MCQs to {out_file} ({new_count} new)")
         except Exception as e:
             if config.shutdown_event.is_set():
                 config.logger.info("Shutdown in progress; suppressing error details.")

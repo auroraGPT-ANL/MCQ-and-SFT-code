@@ -109,9 +109,6 @@ class Model:
         elif model_name.startswith("openai:"):
             self._init_openai_model(model_name)
 
-        elif model_name.startswith("cels:"):
-            self._init_cels_model(model_name)
-
         elif model_name.startswith("argo:") or model_name.startswith("argo-dev:"):
             self._init_argo_model(model_name)
 
@@ -195,28 +192,35 @@ class Model:
         print(f'Running CELS model {self.shortname}')
 
         servers = [s for s in config.cels_model_servers if s.get("shortname") == self.shortname]
+        print('XXXXX1')
         if len(servers)!=1:
             initiate_shutdown(f'CELS model {self.shortname} not known')
         server = servers[0]
 
+        print('XXXXX2', server)
         self.model_name=server["openai_model"]
         self.model_type = "OpenAI"
         self.endpoint = server["openai_api_base"]
+        print('XXXXX3')
         self.key = (
-            openai_access_token if server["openai_api_key"].startswith("${")
+            config.openai_access_token if server["openai_api_key"].startswith("${")
             else server["openai_api_key"]
         )
+        print('XXXXX4')
 
         logger.info(f"CELS model: {self.model_name}")
 
     # "openai:<model>" - OpenAI
     def _init_openai_model(self, model_name: str):
+        print('INIT OPENAI')
         self.model_name = model_name.split("openai:")[1]
         self.model_type = "OpenAI"
         self.endpoint = config.model_type_endpoints['openai']
 
         # look first in secrets.yml; fall back to openai_access_token.txt and nudge the user to use secrets.yml
+        print('XDXDXXXX')
         self.key = config.get_secret("openai.access_token")
+        print('xxxxxxxx')
         if not self.key:
             try:
                 with open("openai_access_token.txt", "r", encoding="utf-8") as fh:

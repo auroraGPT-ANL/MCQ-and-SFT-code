@@ -206,23 +206,33 @@ defaultModelD = _model_name(model_d)
 
 # Prompts
 prompts = _CONFIG.get("prompts", {})
-system_message   = prompts.get("system_message", "")
-user_message     = prompts.get("user_message", "")
-system_message_2 = prompts.get("system_message_2", "")
-user_message_2   = prompts.get("user_message_2", "")
-system_message_3 = prompts.get("system_message_3", "")
-user_message_3   = prompts.get("user_message_3", "")
+system_message_1 = prompts.get("system_message_1", "")
+user_message_1   = prompts.get("user_message_1", "")
+system_message_mcq_2 = prompts.get("system_message_mcq_2", "")
+user_message_mcq_2   = prompts.get("user_message_mcq_2", "")
+system_message_mcq_3 = prompts.get("system_message_mcq_3", "")
+user_message_mcq_3   = prompts.get("user_message_mcq_3", "")
 
 # Fact‑extraction prompts
 fact_extraction_system = prompts.get("fact_extraction_system", "")
 fact_extraction_user   = prompts.get("fact_extraction_user", "")
 
-# Scoring prompts
-scoring_prompts       = _CONFIG.get("scoring_prompts", {})
-score_main_system     = scoring_prompts.get("main_system", "")
-score_main_prompt     = scoring_prompts.get("main_prompt", "")
-score_fallback_system = scoring_prompts.get("fallback_system", "")
-score_fallback_prompt = scoring_prompts.get("fallback_prompt", "")
+# MCQ answering prompts
+answering_prompts = _CONFIG.get("answering_prompts", {})
+system_message_mcq_answer = answering_prompts.get("system_message_mcq_answer", "")
+user_message_mcq_answer = answering_prompts.get("user_message_mcq_answer", "")
+
+# Scoring prompts for MCQs and QA pairs
+scoring_prompts           = _CONFIG.get("scoring_prompts", {})
+score_main_mcq_system     = scoring_prompts.get("main_mcq_system", "")
+score_main_mcq_prompt     = scoring_prompts.get("main_mcq_prompt", "")
+score_fallback_mcq_system = scoring_prompts.get("fallback_mcq_system", "")
+score_fallback_mcq_prompt = scoring_prompts.get("fallback_mcq_prompt", "")
+
+score_main_qa_system      = scoring_prompts.get("main_qa_system", "")
+score_main_qa_prompt      = scoring_prompts.get("main_qa_prompt", "")
+score_fallback_qa_system  = scoring_prompts.get("fallback_qa_system", "")
+score_fallback_qa_prompt  = scoring_prompts.get("fallback_qa_prompt", "")
 
 # Nugget prompts
 nugget_prompts = _CONFIG.get("nugget_prompts", {})

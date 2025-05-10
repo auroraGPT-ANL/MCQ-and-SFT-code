@@ -10,6 +10,7 @@ import sys
 import subprocess
 import time
 import argparse
+import glob
 
 
 def run(cmd, background=False):
@@ -116,31 +117,14 @@ def main():
             if p.returncode != 0:
                 sys.exit(p.returncode)
 
-    # Step 5: Score answers between all models
+    # Step 5: Retrieve answers and count correct
     if start_step <= 5:
-        print("Step 5: Score answers between all models")
-        # Determine input file if not set (in case start_step >3)
-        if 'input_file' not in locals():
-            input_file = "MCQ-subset.json" if n_value else "MCQ-combined.json"
-        processes = []
-        result = subprocess.run(
-            f"python -m common.list_models -p {p_value}",
-            shell=True, capture_output=True, text=True, check=True
-        )
-        MODELS = result.stdout.strip().splitlines()
-        for i, a in enumerate(MODELS, start=1):
-            for j, b in enumerate(MODELS, start=1):
-                if i != j:
-                    print(f"Scoring Model {i} answers using Model {j}")
-                    cmd = (
-                        f"python -m mcq_workflow.score_answers "
-                        f"-a {a} -b {b} -p {p_value} {v_flag}"
-                    )
-                    processes.append(run(cmd, background=True))
-        for p in processes:
-            p.wait()
-            if p.returncode != 0:
-                sys.exit(p.returncode)
+        print("Step 5: Retrieve answers for all models")
+        for file in glob.glob('_RESULTS/answers*'):
+            print(f'Processing file {file}')
+            cmd = (
+                f"python -m mcq_workflow.retrieve_results -a {a} {v_flag}"
+            )
 
     # Final timing
     elapsed = int(time.time() - start_time)
