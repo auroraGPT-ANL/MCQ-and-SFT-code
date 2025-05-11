@@ -18,9 +18,11 @@ dependencies:
  - xz=5.4.6
  - zlib=1.2.13
  - jq
- - pytorch
- - torchvision
- - torchaudio
+ ### these are platform-specific for fine-tuning, not needed
+ ### for testing the pipeline up to that point
+ #- pytorch
+ #- torchvision
+ #- torchaudio
  - pip:
    - huggingface_hub
    - transformers
