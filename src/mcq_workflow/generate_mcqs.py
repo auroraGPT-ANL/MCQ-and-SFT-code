@@ -5,6 +5,19 @@ generate_mcqs.py
 Main entry point for generating MCQs in parallel.
 Parses command-line arguments, initializes the model,
 then calls process_directory from mcq_util.
+
+Generate multiple‑choice questions (MCQs) from a text chunk.
+
+The script asks a language‑model to write **exactly one MCQ** with *n*
+numbered options ("1. …" .. "n. …") and marks the single correct
+answer with the suffix "(*)".  We then post‑process the model response
+into a dictionary that downstream scorers can consume:
+
+{
+    "question": "Which element has the chemical symbol Au?",
+    "choices" : ["1. Silver", "2. Gold", "3. Copper", "4. Argon"],
+    "reference": "2"                        # the correct option number
+}
 """
 
 import os
