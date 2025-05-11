@@ -227,7 +227,7 @@ def robust_parse_json_output(response_text: str, model) -> dict:
     Robustly parse the JSON output from a model.
     If the initial attempt fails, log the error and use a fix prompt.
     """
-    #print(f'ROBUST_PARSE {response_text}\nrrrrrr\n')
+    config.logger.info(f"ROBUST_PARSE {response_text}\n-----\n")
     cleaned = response_text.replace("```json", "").replace("```", "").strip()
     if cleaned.isdigit():
         return {"answer": "", "score": int(cleaned), "comment": ""}
