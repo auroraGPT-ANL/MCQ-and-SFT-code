@@ -36,8 +36,8 @@ from typing import Any, Dict
 import torch
 from pydantic import BaseModel, Field
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
-from lmformatenforcer import JsonSchemaParser
-from lmformatenforcer.integrations.transformers import build_transformers_prefix_allowed_tokens_fn
+#from lmformatenforcer import JsonSchemaParser
+#from lmformatenforcer.integrations.transformers import build_transformers_prefix_allowed_tokens_fn
 
 # Global constant
 CHUNK_SIZE = config.chunkSize
@@ -227,7 +227,7 @@ def robust_parse_json_output(response_text: str, model) -> dict:
     Robustly parse the JSON output from a model.
     If the initial attempt fails, log the error and use a fix prompt.
     """
-    print(f'ROBUST_PARSE {response_text}\nrrrrrr\n)
+    #print(f'ROBUST_PARSE {response_text}\nrrrrrr\n')
     cleaned = response_text.replace("```json", "").replace("```", "").strip()
     if cleaned.isdigit():
         return {"answer": "", "score": int(cleaned), "comment": ""}
@@ -380,12 +380,14 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
         step3_clean = step3_output.replace("```json", "").replace("```", "").strip()
         #parsed_json = robust_parse_json_output(step3_clean, model)
         parsed_json = step3_clean
-        print(f'PARSED_JSON: {parsed_json}\nppppppppp\n')
+        #print(f'PARSED_JSON: {parsed_json}\nppppppppp\n')
+        parsed_json = json.loads(parsed_json)
+        #print(f'PARSED_JSON type: {type(parsed_json)}\n')
         score = parsed_json['score']
         rationale = parsed_json['rationale']
-        print('SS', score, rationale)
+        #print('SS', score, rationale)
         model_score = parsed_json.get("score", 0)
-        print(f'STEP3 SCORE: {model_score}\n-------\n')
+        #print(f'STEP3 SCORE: {model_score}\n-------\n')
         pbar_total.set_postfix_str(f"Score: {model_score}")
 
         if isinstance(model_score, int) and model_score > config.minScore:
