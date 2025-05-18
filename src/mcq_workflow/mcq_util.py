@@ -308,6 +308,39 @@ def robust_parse_json_output(response_text: str, model) -> dict:
             raise ValueError(f"Failed to reformat JSON output. Original error: {e}; fix error: {fix_error}")
 
 
+
+def data_extract_from_file(model, filename):
+    """
+    Process a single file
+    Returns a tuple: (filename, Data Extract (or None), success_flag)
+    """
+    if config.shutdown_event.is_set():
+        return (filename, None, False)
+
+    config.logger.info(f"Processing file {filename}.")
+    with open(f'XXX/{filename}', 'r') as f:
+        file_contents = json.load(f)
+    try:
+        # Next lines to deal with fact that a solitary { in text are interpreted by .format. So need to escape.
+        escaped_prompt = config.extract_user_prompt.replace('{', '{{').replace('}', '}}')
+        escaped_prompt = escaped_prompt.replace('{{data}}', '{data}')
+        data_msg = escaped_prompt.format(data=file_contents['text'])
+        data_extract = model.run(user_prompt=data_msg, system_prompt=config.extract_system_prompt)
+        print(f'\nXXXXX DATA EXTRACT\n-----\n{data_extract}\n-----\n')
+        data_extract = data_extract.replace("```json", "").replace("```", "").strip()
+        if config.shutdown_event.is_set():  # Check after model.run
+            return (filename, None, False)
+    except Exception as e:
+        if config.shutdown_event.is_set():
+            config.logger.info("Shutdown in progress; suppressing error details.")
+            return (filename, None, False)
+        config.logger.info(f"Error extracting text for file {filename}: {e}")
+        return (filename, None, False)
+
+    return (filename, data_extract, True)
+
+
+
 def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
                   pbar_total, pbar_success, shared_counters, counter_lock):
     """
@@ -378,16 +411,11 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
         if step3_output is None:
             raise ValueError("model.run() returned None for step3_output.")
         step3_clean = step3_output.replace("```json", "").replace("```", "").strip()
-        #parsed_json = robust_parse_json_output(step3_clean, model)
         parsed_json = step3_clean
-        #print(f'PARSED_JSON: {parsed_json}\nppppppppp\n')
         parsed_json = json.loads(parsed_json)
-        #print(f'PARSED_JSON type: {type(parsed_json)}\n')
         score = parsed_json['score']
         rationale = parsed_json['rationale']
-        #print('SS', score, rationale)
         model_score = parsed_json.get("score", 0)
-        #print(f'STEP3 SCORE: {model_score}\n-------\n')
         pbar_total.set_postfix_str(f"Score: {model_score}")
 
         if isinstance(model_score, int) and model_score > config.minScore:
@@ -448,6 +476,50 @@ def merge_mcq_output(out_file: str, new_mcqs: list) -> list:
             existing_mcqs.append(mcq)
             existing_ids.add(mcq_id)
     return existing_mcqs
+
+
+def process_data_directory(model, input_dir: str, output_dir: str = "output_files",
+                      use_progress_bar: bool = True, parallel_workers: int = 4, force: bool = False):
+    """
+    Process all JSON files in input_dir by scheduling each file
+    as a separate task. If output files already exist and force is False,
+    those files are skipped.
+    Writes Data Items to output_dir in JSONL format.
+    """
+    config.logger.info(f"Run with {parallel_workers} threads.")
+
+    # Gather list of files.
+    all_files  = [f for f in os.listdir(input_dir) if f.lower().endswith(".json")]
+    total_files = len(all_files)
+
+    if total_files == 0:
+        config.logger.warning(f"No JSON files found in {input_dir}.")
+        return
+
+    file_results = {}
+
+    for filename in all_files:
+        fname, data, success = data_extract_from_file(model, filename)
+        if success:
+            file_results[filename] = data
+
+    # Write out data for each file.
+    os.makedirs(output_dir, exist_ok=True)
+    for filename in file_results:
+        data = file_results[filename]
+        base = os.path.splitext(fname)[0]
+        out_file = os.path.join(output_dir, f'processed_{base}_{model.shortname}.jsonl')
+        try:
+            with open(out_file, 'w', encoding='utf-8') as out_f:
+                out_f.write(data + "\n")
+            config.logger.info(f"Wrote Data Items to {out_file}")
+            print(f"Wrote Data Items of {len(data)} bytes to {out_file}")
+        except Exception as e:
+            if config.shutdown_event.is_set():
+                config.logger.info("Shutdown in progress; suppressing error details.")
+                return
+            else:
+                config.logger.error(f"Failed to write output file {out_file}: {e}")
 
 
 def process_directory(model, input_dir: str, output_dir: str = "output_files",

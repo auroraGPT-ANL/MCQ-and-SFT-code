@@ -202,7 +202,6 @@ class Model:
 
     # "openai:<model>" - OpenAI
     def _init_openai_model(self, model_name: str):
-        print('INIT OPENAI')
         self.model_name = model_name.split("openai:")[1]
         self.model_type = "OpenAI"
         self.endpoint = config.model_type_endpoints['openai']
@@ -379,6 +378,7 @@ class Model:
             logger.error(f"Unknown model type: {self.model_type}.")
             initiate_shutdown("Unknown model type. Exiting.")
 
+    # -----------------------------------------------------------------------
     # Error Handling Methods
     # -----------------------------------------------------------------------
     def _get_error_threshold(self) -> int:

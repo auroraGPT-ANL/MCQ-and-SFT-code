@@ -43,14 +43,18 @@ def process_mcq_item(mcq_item, index, model):
     user_message = config.user_message_mcq_answer.format(num_answers=7, question=question, choices=choices)
 
     try:
+        #print('AAA', user_message)
+        #print('BBB', config.system_message_mcq_answer)
         model_answer = model.run(user_prompt=user_message, system_prompt=config.system_message_mcq_answer)
+        #print(f'XXX-{model_answer}-XXX')
         cleaned = model_answer.replace("```json", "").replace("```", "").strip()
         model_answer2 = json.loads(cleaned)
         answer = model_answer2['answer']
         #comment = model_answer2['comment']
     except Exception as e:
         config.logger.error(f"Error processing item {index}: {e}")
-        print('ERROR', model_answer)
+        #print('ERROR', model_answer)
+        #exit(1)
         return (index, None)
     gen_time = time.time() - start_time
 
@@ -74,12 +78,11 @@ def generate_answers_file(
     input_file: str,
     model_name: str = config.defaultModel,
     output_dir: str = None,
-    start_index: int = 0,
-    end_index: Union[int, str] = 'all',
     parallel: int = None,
     cache_dir: str = None,
     quiet: bool = False,
-    verbose: bool = False
+    verbose: bool = False,
+    force: bool = False
 ) -> str:
     """
     Generate model answers for MCQs stored in a JSON or JSONL file.
@@ -96,6 +99,16 @@ def generate_answers_file(
         input_file = os.path.join(config.mcq_dir, jsonl_files[0])
         config.logger.info(f"Using default MCQ file: {input_file}")
 
+    # Prepare output path
+    out_dir = output_dir or config.results_dir
+    os.makedirs(out_dir, exist_ok=True)
+    fname = f"answers_{model_name.replace('/','+')}.jsonl"
+    output_path = os.path.join(out_dir, fname)
+
+    if not force and os.path.exists(output_path):
+        print(f"Skipping as already exists: {output_path}")
+        config.logger.info(f"Skipping as already exists: {output_path}")
+        return
 
     # Configure verbosity
 
@@ -116,7 +129,9 @@ def generate_answers_file(
     with open(input_file, 'r', encoding='utf-8') as f:
         content = f.read().strip()
     if not content:
-        raise ValueError(f"Input file {input_file} is empty.")
+        #raise ValueError(f"Input file {input_file} is empty.")
+        print(f"Input file {input_file} is empty.")
+        return
     if content[0] == '[':
         items = json.loads(content)
         for itm in items:
@@ -141,25 +156,11 @@ def generate_answers_file(
     if not data:
         raise ValueError("No valid items found in input file.")
 
-    # Slice data between start_index and end_index
-    start = start_index
-    if end_index == 'all':
-        slice_data = data[start:]
-    else:
-        slice_data = data[start:int(end_index)]
-
-    total = len(slice_data)
+    total = len(data)
     config.logger.info(f"Generating answers for {total} items with model {model_name}")
 
     # Determine thread count
     max_workers = parallel or config.defaultThreads
-
-    # Prepare output path
-    out_dir = output_dir or config.results_dir
-    os.makedirs(out_dir, exist_ok=True)
-    suffix = f"_{start}_{end_index}" if start != 0 or end_index != 'all' else ''
-    fname = f"answers_{model_name.replace('/','+')}{suffix}.jsonl"
-    output_path = os.path.join(out_dir, fname)
 
     # Remove existing output
     if os.path.exists(output_path):
@@ -180,7 +181,7 @@ def generate_answers_file(
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(process_mcq_item, mcq, idx, model): idx
-                for idx, mcq in enumerate(slice_data, start=1)
+                for idx, mcq in enumerate(data, start=1)
             }
             for fut in concurrent.futures.as_completed(futures):
                 idx, res = fut.result()
@@ -207,14 +208,13 @@ def main():
         description='Generate answers for MCQs via LLM.'
     )
     parser.add_argument('-m','--model',    default=config.defaultModel)
-    parser.add_argument('-s','--start',    type=int, default=0)
-    parser.add_argument('-e','--end',      default='all')
     parser.add_argument('-c','--cache-dir',default=os.getenv('HF_HOME'))
     parser.add_argument('-i','--input',    default=None, help='JSON or JSONL file')
     parser.add_argument('-o','--output',   default=None)
     parser.add_argument('-p','--parallel', type=int, default=config.defaultThreads)
     parser.add_argument('-q','--quiet',    action='store_true')
     parser.add_argument('-v','--verbose',  action='store_true')
+    parser.add_argument('-f','--force',    action='store_true')
     args = parser.parse_args()
 
     try:
@@ -222,12 +222,11 @@ def main():
             input_file   = args.input,
             model_name   = args.model,
             output_dir   = args.output,
-            start_index  = args.start,
-            end_index    = args.end,
             parallel     = args.parallel,
             cache_dir    = args.cache_dir,
             quiet        = args.quiet,
-            verbose      = args.verbose
+            verbose      = args.verbose,
+            force        = args.force
         )
         print(out_file)
     except Exception as e:

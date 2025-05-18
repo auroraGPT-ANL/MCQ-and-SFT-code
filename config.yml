@@ -258,6 +258,186 @@ prompts:
     Return a valid JSON object containing exactly three keys: 'answer', 'score', and 'comment'.
 
 
+
+#=================================================================================
+#
+# Prompts for extract_facts.py
+#
+#=================================================================================
+extract_prompts:
+  system_message_data_extract: |
+    You are a precise fact extractor that identifies atomic, verifiable factual statements about polymers in scientific text.
+    An atomic fact is a single, standalone claim that can be verified as true or false.
+    Focus on extracting specific claims, findings, methodologies, and results.
+    Return your output in a structured JSON format.
+
+  user_message_data_extract: |
+    You are tasked with extracting key polymer properties from materials research papers. Some papers may discuss multiple polymers, and it is essential that you include all extractable polymers. For every polymer mentioned in the paper with any extractable information—even if some fields are missing—create an object in a "polymers" array. If a sub-entry is blank (i.e., no information is provided), omit that sub-entry from the final JSON output to reduce token usage.
+
+    The following is the data from which you are to extract data:
+        {data}
+
+    Follow these steps and guidelines carefully:
+
+    1. Extract Polymer-Specific Properties:
+    For each polymer in the paper, extract the following properties if available. Ensure that every polymer mentioned is included in the final JSON output.
+
+    • Polymer Identification & Structure:
+      - polymer_name: e.g., "Polyethylene", "Polystyrene"
+      - structure: A description or SMILES notation
+      - common_abbreviation: e.g., "PE", "PS"
+
+    • Molecular Characteristics:
+      - polydispersity: Include a numeric value and an optional "range_notes" if a range is provided
+      - degree_of_polymerization: Represented as "n", with value and "range_notes" if applicable
+      - molecular_weight: Value with unit "g/mol" and "range_notes"
+      - melting_point: Value with unit "°C" and "range_notes"
+      - glass transition temperature: Value with unit  "°C" and "range_notes"
+
+    • Interaction Parameters:
+    Under an "interactions" object, extract:
+      - solvent_interactions: Array of objects containing:
+        * solvent_name: Name of the solvent
+        * chi_parameter: Value with "range_notes"
+        * temperature: Value with unit "°C"
+        * method: How the parameter was determined
+      - polymer_interactions: Array of objects containing:
+        * second_polymer: Name of the other polymer
+        * chi_parameter: Value with "range_notes"
+        * temperature: Value with unit "°C"
+        * method: How the parameter was determined
+
+    • Rheological Properties:
+    Under a "rheological_properties" object, extract:
+      - viscosity: Value with unit "Pa·s" and "range_notes"
+      - viscoelastic_properties:
+        * storage_modulus (G′): Value with unit "Pa", conditions object, and "range_notes"
+        * loss_modulus (G″): Same structure as storage_modulus
+        * tan_delta: Value (dimensionless) with conditions and "range_notes"
+      - transient_response:
+        * relaxation_modulus: Value with unit "Pa" and "range_notes"
+        * creep_compliance: Value with unit "1/Pa" and "range_notes"
+        * creep_recovery: Value with unit "%" and "range_notes"
+    
+    2. Data Validation Checklist:
+    Before submitting output, verify you have captured:
+    - ALL solvent-polymer interaction parameters for each polymer
+    - ALL polymer-polymer interaction parameters
+    - ALL molecular characteristics
+    - Temperature conditions for ALL parameters
+    - Error ranges/uncertainties where provided
+    - Experimental methods used to determine parameters
+    - Units for all numerical values
+    
+    3. Extract Qualitative Insights:
+    - Capture any important qualitative or contextual observations in a "qualitative_insights" array
+    - Include observations about polymer compatibility
+    - Note any unusual processing conditions or experimental methods
+    - Document observed trends or patterns
+    
+    4. Source References:
+    For each extracted metric or qualitative insight, include in "source_references":
+    - metric: The field or property referenced
+    - page: The page number
+    - quote: An exact quote
+    - confidence: "high", "medium", or "low"
+    - inferred: true if value was deduced rather than directly stated
+    
+    5. Output Format:
+    Your final output must be pure JSON following this schema:
+    
+    {
+      "polymers": [
+        {
+          "polymer_name": "",
+          "structure": "",
+          "common_abbreviation": "",
+          "molecular_weight": {
+            "value": null,
+            "unit": "g/mol",
+            "range_notes": ""
+          },
+          "polydispersity": {
+            "value": null,
+            "range_notes": ""
+          },
+          "interactions": {
+            "solvent_interactions": [
+              {
+                "solvent_name": "",
+                "chi_parameter": {
+                  "value": null,
+                  "range_notes": "",
+                  "temperature": {
+                    "value": null,
+                    "unit": "°C"
+                  }
+                },
+                "method": ""
+              }
+            ],
+            "polymer_interactions": [
+              {
+                "second_polymer": "",
+                "chi_parameter": {
+                  "value": null,
+                  "range_notes": "",
+                  "temperature": {
+                    "value": null,
+                    "unit": "°C"
+                  }
+                },
+                "method": ""
+              }
+            ]
+          },
+           "molecular_characteristics": {
+                    "glass_transition_temperature": {
+                        "value": 20,
+                        "unit": "°C"
+                    }
+                },
+          "rheological_properties": {
+            "viscosity": {
+              "value": null,
+              "unit": "Pa·s",
+              "range_notes": ""
+            },
+            "viscoelastic_properties": {
+              "storage_modulus": {
+                "value": null,
+                "unit": "Pa",
+                "range_notes": "",
+                "conditions": {
+                  "temperature": {
+                    "value": null,
+                    "unit": "°C"
+                  },
+                  "frequency": {
+                    "value": null,
+                    "unit": "Hz"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "qualitative_insights": [],
+      "source_references": [
+        {
+          "metric": "",
+          "page": null,
+          "quote": "",
+          "confidence": "high/medium/low",
+          "inferred": false
+        }
+      ]
+    }
+    
+    Return your output as pure JSON starting with "{" and following the schema exactly. Before submitting, verify that you have captured ALL interaction parameters (both solvent-polymer and polymer-polymer) and their associated conditions.
+
+
 #=================================================================================
 #
 # Prompts for generate_answers.py

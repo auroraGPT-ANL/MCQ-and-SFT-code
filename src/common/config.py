@@ -217,6 +217,11 @@ user_message_mcq_3   = prompts.get("user_message_mcq_3", "")
 fact_extraction_system = prompts.get("fact_extraction_system", "")
 fact_extraction_user   = prompts.get("fact_extraction_user", "")
 
+# New
+extract_prompts = _CONFIG.get("extract_prompts", {})
+extract_user_prompt = extract_prompts.get('user_message_data_extract', '')
+extract_system_prompt = extract_prompts.get('system_message_data_extract', '')
+
 # MCQ answering prompts
 answering_prompts = _CONFIG.get("answering_prompts", {})
 system_message_mcq_answer = answering_prompts.get("system_message_mcq_answer", "")

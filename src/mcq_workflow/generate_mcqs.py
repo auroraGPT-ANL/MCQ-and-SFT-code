@@ -127,14 +127,17 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Call the new Python API and capture the output directory
-    mcq_outdir = generate_mcqs_dir(
-        input_dir=args.input,
-        output_dir=args.output,
-        model_name=args.model,
-        parallel_workers=args.parallel,
-        num_answers=args.answers,
-        verbose=args.verbose,
-        force=args.force,
-    )
-    # Print the resulting path for wrappers or agent capture
-    print(mcq_outdir)
+    try:
+        mcq_outdir = generate_mcqs_dir(
+            input_dir=args.input,
+            output_dir=args.output,
+            model_name=args.model,
+            parallel_workers=args.parallel,
+            num_answers=args.answers,
+            verbose=args.verbose,
+            force=args.force,
+        )
+        # Print the resulting path for wrappers or agent capture
+        print(mcq_outdir)
+    except Exception as e:
+        print(f'Exception on input {args.input}: {e}')
