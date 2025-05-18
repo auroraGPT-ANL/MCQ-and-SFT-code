@@ -19,8 +19,11 @@ def run(cmd, background=False):
     if background:
         return subprocess.Popen(cmd, shell=True)
     else:
-        subprocess.run(cmd, shell=True, check=True)
-
+        try:
+            subprocess.run(cmd, shell=True, check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"\n❌ Command failed: {e.cmd}\n   Exit code: {e.returncode}")
+            sys.exit(e.returncode)
 
 def main():
     start_time = time.time()

@@ -97,8 +97,12 @@ def configure_verbosity(args) -> bool:  # noqa: ANN001 – argparse.Namespace
 # ---------------------------------------------------------------------------
 
 def _safe_load_yaml(path: str) -> dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as fh:
-        return yaml.safe_load(fh) or {}
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return yaml.safe_load(fh) or {}
+    except yaml.YAMLError as exc:
+        logger.error(f"\n❌ YAML parsing error in '{path}':\n{exc}")
+        initiate_shutdown(f"YAML parsing failed for '{path}' – please check indentation and syntax.")
 
 
 def load_config(path: str | None = None) -> dict[str, Any]:
