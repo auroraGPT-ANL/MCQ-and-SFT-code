@@ -24,6 +24,7 @@ from typing import Any
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))  # src/common
 REPO_ROOT = os.path.abspath(os.path.join(THIS_DIR, os.pardir, os.pardir))
 CONFIG_YML_PATH = os.path.join(REPO_ROOT, "config.yml")
+CONFIG_LOCAL_YML_PATH = os.path.join(REPO_ROOT, "config.local.yml")
 
 # ---------------------------------------------------------------------------
 #  Logger
@@ -116,6 +117,17 @@ def load_config(path: str | None = None) -> dict[str, Any]:
         logger.error(f"Error parsing YAML file '{path}': {exc}")
         raise
 
+def load_local_config() -> dict[str, Any]:
+    """Load config.local.yml if it exists."""
+    if not os.path.exists(CONFIG_LOCAL_YML_PATH):
+        logger.error(f"Local config '{CONFIG_LOCAL_YML_PATH}' not found")
+        sys.exit(1)
+    try:
+        return _safe_load_yaml(CONFIG_LOCAL_YML_PATH)
+    except yaml.YAMLError as exc:
+        logger.error(f"Error parsing YAML file '{CONFIG_LOCAL_YML_PATH}': {exc}")
+        raise
+
 def load_secrets(cfg: dict[str, Any]) -> dict[str, Any]:
     """Load the secrets file referred to in *config.yml* (returns empty dict if absent)."""
     rel_path = cfg.get("argo", {}).get("username_file")
@@ -154,6 +166,7 @@ def get_secret(path: str, default: Any = None) -> Any:
 # ---------------------------------------------------------------------------
 
 _CONFIG = load_config()
+_LOCAL_CONFIG = load_local_config()
 _SECRETS = load_secrets(_CONFIG)
 
 try:
@@ -195,10 +208,10 @@ http_client = _CONFIG.get("http_client", {
     "pool_maxsize": 1
 })
 
-model   = _CONFIG.get("model", {})
-model_b = _CONFIG.get("model_b", {})
-model_c = _CONFIG.get("model_c", {})
-model_d = _CONFIG.get("model_d", {})
+model   = _LOCAL_CONFIG.get("model", _CONFIG.get("model", {}))
+model_b = _LOCAL_CONFIG.get("model_b", _CONFIG.get("model_b", {}))
+model_c = _LOCAL_CONFIG.get("model_c", _CONFIG.get("model_c", {}))
+model_d = _LOCAL_CONFIG.get("model_d", _CONFIG.get("model_d", {}))
 
 def _model_name(d):
     return d.get("name") if isinstance(d, dict) else None
