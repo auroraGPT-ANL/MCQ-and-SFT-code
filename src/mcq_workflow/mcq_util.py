@@ -638,7 +638,7 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
                     config.logger.warning("Shutdown in progress; suppressing error details.")
                     return
                 else:
-                    config.logger.error(f"Error processing a chunk: {e}")
+                    config.logger.info(f"Error processing a chunk: {e}")
 
     if use_progress_bar:
         remaining = pbar_total.total - pbar_total.n
