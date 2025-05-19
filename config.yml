@@ -30,43 +30,15 @@ model_type_endpoints:
   argo:     "https://apps.inside.anl.gov/argoapi/api/v1/resource/chat"
   argo_dev: "https://apps-dev.inside.anl.gov/argoapi/api/v1/resource/chat"
 
-# this model is the default for Model-A for score_answers.py
-model:
-  #name:        "openai:gpt-4.1-mini"
-  name: "cels:locallama"
-  #name:        "cels:scout"
-  #name:        "argo:gpt4large"
-  temperature:  0.7  
-  baseModel:   "None"
-  Tokenizer:   "None"
-
-# model-B for score_answers.py
-# model-B also the model whose knowledge is tested w.r.t. factoid nuggets
-#         (Temperature=0 is recommended for knowledge testing)
-
-model_b:
-  name: "cels:locallama"
-  #name:        "cels:scout"
-    #name:         "openai:gpt-4.1-nano"
-  #name:         "argo:gpt4"
-  temperature:   0.0
-  baseModel:    "None"
-  Tokenizer:    "None"
-
-model_c:
-  name: "cels:CePO"
- # name:         "argo:gpt35"
-  #name:        "alcf:meta-llama/Meta-Llama-3-8B-Instruct"
-  temperature:  0.7
-  baseModel:   "None"
-  Tokenizer:   "None"
-
-model_d:
-  #name:        "alcf:mistralai/Mistral-7B-Instruct-v0.3"
- # name:         "argo:gpt4turbo"
-  temperature:  0.7
-  baseModel:   "None"
-  Tokenizer:   "None"
+# Models
+# Model configurations are now stored in config.local.yml (not tracked in git)
+# Create your own config.local.yml based on config.local.yml.example
+#
+# Previously defined here:
+# - model: default for score_answers.py
+# - model_b: for score_answers.py and knowledge testing (Temperature=0 recommended)
+# - model_c: additional model
+# - model_d: additional model
 
 # Argo API configuration
 argo:
@@ -198,17 +170,19 @@ prompts:
 
   # ===== Step 2: Generate MCQ =====
   system_message_mcq_2: |
-    You are a helpful assistant that generates exactly ONE multiple-choice question based on the provided text (augmented_chunk). The question must have {num_answers} possible answers, numbered 1 to {num_answers}. Exactly one of these {num_answers} choices is correct. Mark the correct choice with '(*)' at the end for later grading.
+    You are a helpful assistant that generates exactly ONE multiple-choice question based on the provided text (augmented_chunk). The question must have exactly {num_answers} unique possible answers, numbered 1 to {num_answers}. Each answer must be distinct - do not repeat any answer choices. Exactly one of these {num_answers} choices is correct. Mark the correct choice with '(*)' at the end for later grading.
   user_message_mcq_2: |
     Below is some content called augmented_chunk.
     Please:
     1) Create exactly one multiple-choice question that can be answered by the augmented_chunk.
-    2) Provide {num_answers} distinct options (1 to {num_answers}) as answers.
+    2) Provide exactly {num_answers} distinct options (1 to {num_answers}) as answers. Each answer must be unique - do not repeat any choices.
     3) Mark the correct answer with '(*)' at the end of that particular option.
 
     Constraints:
     - The question and answers must be self-contained and understandable without referencing the chunk.
     - Do not mention 'chunk' or 'augmented_chunk' or 'article' or 'study' in the final output.
+    - Each answer choice must be unique - do not repeat any choices.
+    - Number answers consecutively from 1 to {num_answers}.
 
     augmented_chunk:
     {augmented_chunk}
