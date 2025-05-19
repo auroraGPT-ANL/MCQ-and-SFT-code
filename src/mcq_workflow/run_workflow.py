@@ -124,10 +124,8 @@ def main():
     if start_step <= 5:
         print("Step 5: Retrieve answers for all models")
         for file in glob.glob('_RESULTS/answers*'):
-            print(f'Processing file {file}')
-            cmd = (
-                f"python -m mcq_workflow.retrieve_results -a {a} {v_flag}"
-            )
+            #print(f'Processing file {file}')
+            cmd = (f"python -m mcq_workflow.retrieve_results  {v_flag}")
 
     # Final timing
     elapsed = int(time.time() - start_time)
