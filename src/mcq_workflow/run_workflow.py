@@ -90,8 +90,8 @@ def main():
         if n_value:
             print(f"Selecting {n_value} MCQs at random...")
             run(
-                f"python -m mcq_workflow.select_mcqs_at_random "
-                f"-i MCQ-combined.jsonl -o MCQ-subset.jsonl -n {n_value}"
+                f"python -m common.select_mcqs_at_random "
+                f"-i MCQ-combined.json -o MCQ-subset.json -n {n_value}"
             )
             input_file = "MCQ-subset.json"
         else:
