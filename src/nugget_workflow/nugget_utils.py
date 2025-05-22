@@ -15,16 +15,19 @@ from tqdm import tqdm
 import concurrent.futures
 from concurrent.futures import TimeoutError
 import threading
-import copy
 
-from common import config
+from common import config  # Keep for backward compatibility
+from common.settings import load_settings
 from common.model_access import Model
 
+# Initialize settings
+settings = load_settings()
 
 ##############################################################################
 # Global constants
 ##############################################################################
-CHUNK_SIZE = config.chunkSize
+# Use settings with fallback to config for backward compatibility
+CHUNK_SIZE = settings.quality.chunkSize if hasattr(settings, 'quality') else config.chunkSize
 
 # Initialize spaCy model
 nlp = spacy.load("en_core_web_sm")
@@ -193,9 +196,13 @@ def extract_paper_metadata(chunk, model):
 
             # We still need to try to get the title and author for fallback purposes
             try:
+                # Get prompts from settings if available, otherwise fall back to config
+                metadata_system = settings.nugget_prompts.get('metadata_system') if hasattr(settings, 'nugget_prompts') else config.nugget_prompts['metadata_system']
+                metadata_user = settings.nugget_prompts.get('metadata_user') if hasattr(settings, 'nugget_prompts') else config.nugget_prompts['metadata_user']
+
                 response = model.run(
-                    system_prompt=config.nugget_prompts['metadata_system'],
-                    user_prompt=config.nugget_prompts['metadata_user'].format(chunk=chunk)
+                    system_prompt=metadata_system,
+                    user_prompt=metadata_user.format(chunk=chunk)
                 )
                 model_metadata = json.loads(response)
                 metadata["title"] = model_metadata.get("title")
@@ -228,9 +235,13 @@ def extract_paper_metadata(chunk, model):
 
         # If no direct matches, use the model to extract metadata
         try:
+            # Get prompts from settings if available, otherwise fall back to config
+            metadata_system = settings.nugget_prompts.get('metadata_system') if hasattr(settings, 'nugget_prompts') else config.nugget_prompts['metadata_system']
+            metadata_user = settings.nugget_prompts.get('metadata_user') if hasattr(settings, 'nugget_prompts') else config.nugget_prompts['metadata_user']
+
             response = model.run(
-                system_prompt=config.nugget_prompts['metadata_system'],
-                user_prompt=config.nugget_prompts['metadata_user'].format(chunk=chunk)
+                system_prompt=metadata_system,
+                user_prompt=metadata_user.format(chunk=chunk)
             )
 
             model_metadata = json.loads(response)
@@ -268,9 +279,13 @@ def extract_paper_metadata(chunk, model):
 def lookup_doi(title, first_author, model):
     """Search for and return the paper's DOI using title and first author."""
     try:
+        # Get prompts from settings if available, otherwise fall back to config
+        doi_system = settings.nugget_prompts.get('doi_system') if hasattr(settings, 'nugget_prompts') else config.nugget_prompts['doi_system']
+        doi_user = settings.nugget_prompts.get('doi_user') if hasattr(settings, 'nugget_prompts') else config.nugget_prompts['doi_user']
+
         response = model.run(
-            system_prompt=config.nugget_prompts['doi_system'],
-            user_prompt=config.nugget_prompts['doi_user'].format(
+            system_prompt=doi_system,
+            user_prompt=doi_user.format(
                 title=title,
                 first_author=first_author
             )
@@ -311,51 +326,6 @@ def extract_abstract(chunk):
         return None
 
 
-def clean_response(response_text: str) -> str:
-    # Remove illegal control characters that would break json.loads.
-    return re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', response_text)
-
-
-def evaluate_model_known_facts(facts, model):
-    """
-    This function evaluates the model's knowledge of the facts
-
-    Args:
-        facts (list): List of fact dictionaries with 'claim' keys
-        model (Model): The model instance to use for similarity comparison
-
-    Returns:
-        list: list of facts 
-    """
-    # Make a deep copy of the facts to avoid modifying the original list
-    local_facts = copy.deepcopy(facts)
-    
-    # Get the claims from the local facts
-    claims = [fact['claim'] for fact in local_facts]
-    # Convert claims to JSON format for querying the model
-    json_facts = json.dumps(claims, ensure_ascii=False)
-
-    # Query the model to evaluate known facts
-    response = model.run(
-        system_prompt=config.prompts['evaluate_known_facts_system'],
-        user_prompt=config.prompts['evaluate_known_facts_user'].format(
-            claims_json=json_facts
-        )
-    )
-    try:
-        model_knowledge_data = json.loads(response)
-    except (json.JSONDecodeError, KeyError) as e:
-        config.logger.warning(f"Error parsing similarity response: {e}")
-
-    # Add 'known_fact' key based on match
-    for fact in local_facts:
-        claim = fact.get('claim')
-        if claim in model_knowledge_data:
-            fact['known_fact'] = model_knowledge_data[claim]
-
-    return local_facts
-
-
 def deduplicate_facts(facts, model, similarity_threshold=0.88, confidence_threshold=0.5):
     """
     Cluster similar facts and filter low-confidence ones.
@@ -378,9 +348,13 @@ def deduplicate_facts(facts, model, similarity_threshold=0.88, confidence_thresh
     for fact in high_confidence_facts:
         is_duplicate = False
         for existing_fact in unique_facts:
+            # Get prompts from settings if available, otherwise fall back to config
+            fact_comparison_system = settings.prompts.get('fact_comparison_system') if hasattr(settings, 'prompts') else config.prompts['fact_comparison_system']
+            fact_comparison_user = settings.prompts.get('fact_comparison_user') if hasattr(settings, 'prompts') else config.prompts['fact_comparison_user']
+
             response = model.run(
-                system_prompt=config.prompts['fact_comparison_system'],
-                user_prompt=config.prompts['fact_comparison_user'].format(
+                system_prompt=fact_comparison_system,
+                user_prompt=fact_comparison_user.format(
                     fact1=fact['claim'],
                     fact2=existing_fact['claim']
                 )
@@ -404,9 +378,6 @@ def deduplicate_facts(facts, model, similarity_threshold=0.88, confidence_thresh
         if not is_duplicate:
             unique_facts.append(fact)
 
-    # Evaluate the model's knowledge of the unique facts
-    unique_facts = evaluate_model_known_facts(unique_facts, model)
-
     return unique_facts
 
 
@@ -422,13 +393,17 @@ def extract_atomic_facts(chunk, model):
         list: A list of dicts with structure: [{"claim": "...", "span": "...", "confidence": 0.95}]
     """
     try:
-        formatted_user_message = config.prompts['fact_extraction_user'].format(chunk=chunk)
+        # Get prompts from settings if available, otherwise fall back to config
+        fact_extraction_user = settings.prompts.get('fact_extraction_user') if hasattr(settings, 'prompts') else config.prompts['fact_extraction_user']
+        fact_extraction_system = settings.prompts.get('fact_extraction_system') if hasattr(settings, 'prompts') else config.prompts['fact_extraction_system']
+
+        formatted_user_message = fact_extraction_user.format(chunk=chunk)
         response = model.run(
             user_prompt=formatted_user_message,
-            system_prompt=config.prompts['fact_extraction_system']
+            system_prompt=fact_extraction_system
         )
 
-        facts = json.loads(clean_response(response))
+        facts = json.loads(response)
 
         if not isinstance(facts, list):
             config.logger.warning(f"Unexpected facts format (not a list): {facts}")
@@ -802,4 +777,5 @@ def process_directory(model, input_dir: str, output_file: str = "nuggets.jsonl",
         f"Shared counters: {shared_counters}\n"
         f"Total nuggets saved to {output_file}: {total_nuggets_processed}"
     )
+
 

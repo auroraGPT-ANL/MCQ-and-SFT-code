@@ -16,7 +16,7 @@ Functions:
     robust_parse_json_output (response_text: str, model) -> dict:
     process_chunk            (model, filename, file_path, linenum, chunknum, chunk,
                               pbar_total, pbar_success, shared_counters, counter_lock):
-    merge_mcq_output         (out_file: str, new_mcqs: list) -> list:
+    merge_mcq_output         (out_file: str, new_qa_pairs: list) -> list:
     process_directory        (model, input_dir: str, output_dir: str = "output_files",
                               use_progress_bar: bool = True, parallel_workers: int = 4,
                               force: bool = False):
@@ -30,17 +30,14 @@ import time
 import spacy
 from tqdm import tqdm
 from concurrent.futures import TimeoutError
-from common import config
+from common.settings import load_settings
+from common import config  # Keep for backward compatibility
 
-from typing import Any, Dict
-import torch
-from pydantic import BaseModel, Field
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
-#from lmformatenforcer import JsonSchemaParser
-#from lmformatenforcer.integrations.transformers import build_transformers_prefix_allowed_tokens_fn
+# Initialize settings
+settings = load_settings()
 
-# Global constant
-CHUNK_SIZE = config.chunkSize
+# Global constant - use settings but fall back to config for backward compatibility
+CHUNK_SIZE = settings.quality.chunkSize if hasattr(settings, 'quality') else config.chunkSize
 
 # Initialize spaCy model once.
 nlp = spacy.load("en_core_web_sm")
@@ -69,57 +66,13 @@ def load_file_lines(filepath: str) -> list:
         else:
             return file.readlines()
 
-# Regex: captures leading number + dot, optional space, answer text, optional (*)
-CHOICE_PATTERN = re.compile(r"^(\d+)\.\s*(.+?)(\s*\(\*\))?\s*$")
-
-def _parse_model_output(raw: str, num_answers: int):
-    """Convert the LM's raw text into a record
-
-    Expected layout:
-    Question: …\n
-    1. Choice text …\n
-    2. Choice … (*)\n
-    etc.
-    """
-    # split into lines & strip empty
-    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
-
-    # Heuristic: first line beginning with something other than a number is Q.
-    # If LM outputs "Question: …" remove the prefix.
-    question_line = lines.pop(0)
-    if question_line.lower().startswith("question:"):
-        question = question_line.split("question:", 1)[1].strip()
-    else:
-        question = question_line
-
-    choices: List[str] = []
-    reference_number: str | None = None
-
-    for line in lines:
-        m = CHOICE_PATTERN.match(line)
-        if not m:
-            # ignore lines that don't look like choices (footer, etc.)
-            continue
-        number, text, star = m.groups()
-        if star:
-            reference_number = number
-        choices.append(f"{number}. {text.strip()}")
-
-    if len(choices) != num_answers:
-        raise ValueError(f"Expected {num_answers} choices, got {len(choices)}: {choices}")
-    if reference_number is None:
-        raise ValueError("No correct choice marked with (*) in model output")
-
-    return question, choices, reference_number
-
-
 # quicker estimate of chunk count up front - saves 10-20s of startup and associated
 # user head-scratching before pbar is displayed
 
 import os
 import json
-from common import config
-CHUNK_SIZE = config.chunkSize
+# Use the already imported settings
+# CHUNK_SIZE already defined above
 
 def estimate_chunk_count(input_dir: str, files: list[str], *_ignore) -> int:
     """
@@ -186,7 +139,7 @@ def count_chunks_in_file(filepath: str, chunk_size: int = CHUNK_SIZE) -> int:
             except json.JSONDecodeError:
                 continue
     except Exception as e:
-        config.logger.error(f"Failed to count chunks in file {filepath}: {e}")
+    config.logger.error(f"Failed to count chunks in file {filepath}: {e}")  # Keep using config.logger for compatibility
     return total_chunks
 
 
@@ -222,12 +175,12 @@ def attempt_parse_json(s: str) -> dict:
         raise ValueError(f"Parsed JSON is not an object: {parsed}")
     return parsed
 
+
 def robust_parse_json_output(response_text: str, model) -> dict:
     """
     Robustly parse the JSON output from a model.
     If the initial attempt fails, log the error and use a fix prompt.
     """
-    config.logger.info(f"ROBUST_PARSE {response_text}\n-----\n")
     cleaned = response_text.replace("```json", "").replace("```", "").strip()
     if cleaned.isdigit():
         return {"answer": "", "score": int(cleaned), "comment": ""}
@@ -240,65 +193,28 @@ def robust_parse_json_output(response_text: str, model) -> dict:
         if config.shutdown_event.is_set():
             raise ValueError("Shutdown in progress")
         try:
-            # Log the error to a file
             with open("json_error_log.txt", "a", encoding="utf-8") as error_file:
                 error_file.write(f"Initial JSON parsing error: {e}\nResponse: {response_text}\n\n")
         except Exception as file_e:
-            # Log the error to the main logger if file writing fails
             config.logger.error(f"Failed to write JSON error log: {file_e}")
-        
-        # Attempt to fix the JSON using a model prompt
-        # This is a fallback mechanism to handle cases where the model's output is not valid JSON
-        config.logger.info(f"Initial JSON parsing failed: {e}. Attempting reformat with enforced decoding.")
-
-        # Define your desired data structure
-        class AnswerFormat(BaseModel):
-            question: str = Field(description="The original question being answered")
-            answer: str = Field(description="The actual answer text")
-            score: int = Field(description="A score from 0-10 evaluating the answer")
-
-        # Initialize the JSON schema parser based on the AnswerFormat schema
-        parser = JsonSchemaParser(AnswerFormat.schema())
-
-        # Build the prefix function to enforce the JSON schema during generation
-        prefix_fn = build_transformers_prefix_allowed_tokens_fn(model.tokenizer, parser)
-
-        # Construct the prompt to guide the model's response
-        fix_prompt = (
-            f"Convert the following text strictly into valid JSON with exactly three keys: "
-            f"{AnswerFormat.schema_json()}\n"
-            f"Do not include any additional text or markdown.\n"
-            f"TEXT TO FIX:\n"
-            f"{response_text}"
+        config.logger.info(f"Initial JSON parsing failed: {e}. Attempting reformat.")
+        fix_prompt = f"""
+Convert the following text strictly into valid JSON with exactly three keys: "question", "answer", and "score".
+Do not include any additional text or markdown.
+TEXT TO FIX:
+{response_text}
+        """
+        fixed_output = model.run(
+            system_prompt="You are a strict JSON converter. Return only valid JSON.",
+            user_prompt=fix_prompt
         )
-
-        # Create a Hugging Face text-generation pipeline using the provided model
-        hf_pipeline = pipeline(
-            "text-generation",
-            model=model.base_model,
-            tokenizer=model.tokenizer,
-            device_map="auto",
-            torch_dtype=torch.float16
-        )
-
-        # Generate the output with enforced format
-        fixed_output = hf_pipeline(
-            fix_prompt,
-            prefix_allowed_tokens_fn=prefix_fn,
-            max_new_tokens=512,
-            return_full_text=False
-        )[0]["generated_text"]
-
-        print(f"[INFO] Generated output: {fixed_output[0:100]}...")
-
         if not fixed_output.strip():
             if cleaned.isdigit():
                 return {"answer": "", "score": int(cleaned), "comment": ""}
             else:
                 raise ValueError("Fix prompt returned empty output.")
         try:
-            # Parse the generated JSON string into a Python dictionary
-            return AnswerFormat.parse_raw(fixed_output.strip()).dict()
+            return attempt_parse_json(fixed_output)
         except Exception as fix_error:
             try:
                 with open("json_error_log.txt", "a", encoding="utf-8") as error_file:
@@ -308,39 +224,6 @@ def robust_parse_json_output(response_text: str, model) -> dict:
             raise ValueError(f"Failed to reformat JSON output. Original error: {e}; fix error: {fix_error}")
 
 
-
-def data_extract_from_file(model, filename):
-    """
-    Process a single file
-    Returns a tuple: (filename, Data Extract (or None), success_flag)
-    """
-    if config.shutdown_event.is_set():
-        return (filename, None, False)
-
-    config.logger.info(f"Processing file {filename}.")
-    with open(f'XXX/{filename}', 'r') as f:
-        file_contents = json.load(f)
-    try:
-        # Next lines to deal with fact that a solitary { in text are interpreted by .format. So need to escape.
-        escaped_prompt = config.extract_user_prompt.replace('{', '{{').replace('}', '}}')
-        escaped_prompt = escaped_prompt.replace('{{data}}', '{data}')
-        data_msg = escaped_prompt.format(data=file_contents['text'])
-        data_extract = model.run(user_prompt=data_msg, system_prompt=config.extract_system_prompt)
-        print(f'\nXXXXX DATA EXTRACT\n-----\n{data_extract}\n-----\n')
-        data_extract = data_extract.replace("```json", "").replace("```", "").strip()
-        if config.shutdown_event.is_set():  # Check after model.run
-            return (filename, None, False)
-    except Exception as e:
-        if config.shutdown_event.is_set():
-            config.logger.info("Shutdown in progress; suppressing error details.")
-            return (filename, None, False)
-        config.logger.info(f"Error extracting text for file {filename}: {e}")
-        return (filename, None, False)
-
-    return (filename, data_extract, True)
-
-
-
 def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
                   pbar_total, pbar_success, shared_counters, counter_lock):
     """
@@ -348,19 +231,23 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
       1. Summarize & expand the chunk.
       2. Generate a multiple-choice question.
       3. Verify and score the result.
-    Returns a tuple: (filename, linenum, chunknum, MCQ info (or None), success_flag)
+    Returns a tuple: (filename, linenum, chunknum, QA pair dict (or None), success_flag)
     """
     if config.shutdown_event.is_set():
         return (filename, linenum, chunknum, None, False)
 
     config.logger.info(f"Processing chunk {chunknum} in file {filename}.")
-    mcq = None
+    qa_pair = None
     chunk_success = False
 
     # Step 1: Summarize & Expand.
     try:
-        step1_msg = config.user_message_1.format(chunk=chunk)
-        step1_output = model.run(user_prompt=step1_msg, system_prompt=config.system_message_1)
+        # Get prompts from settings if available, otherwise fall back to config
+        user_message = settings.prompts.get("user_message") if hasattr(settings, "prompts") else config.user_message
+        system_message = settings.prompts.get("system_message") if hasattr(settings, "prompts") else config.system_message
+
+        step1_msg = user_message.format(chunk=chunk)
+        step1_output = model.run(user_prompt=step1_msg, system_prompt=system_message)
         if config.shutdown_event.is_set():  # Check after model.run
             return (filename, linenum, chunknum, None, False)
         augmented_chunk = step1_output
@@ -383,8 +270,12 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
 
     # Step 2: Generate the MCQ.
     try:
-        step2_msg = config.user_message_mcq_2.format(augmented_chunk=augmented_chunk, num_answers=7)
-        generated_question = model.run(user_prompt=step2_msg, system_prompt=config.system_message_mcq_2.format(num_answers=7))
+        # Get prompts from settings if available, otherwise fall back to config
+        user_message_2 = settings.prompts.get("user_message_2") if hasattr(settings, "prompts") else config.user_message_2
+        system_message_2 = settings.prompts.get("system_message_2") if hasattr(settings, "prompts") else config.system_message_2
+
+        step2_msg = user_message_2.format(augmented_chunk=augmented_chunk)
+        generated_question = model.run(user_prompt=step2_msg, system_prompt=system_message_2)
         if config.shutdown_event.is_set():  # Check after model.run
             return (filename, linenum, chunknum, None, False)
     except Exception as e:
@@ -396,41 +287,40 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
         update_shared_counters(False, shared_counters, counter_lock)
         return (filename, linenum, chunknum, None, False)
 
-    (question, choices, reference_number) = _parse_model_output(generated_question, 7)
-
     # Step 3: Verify and Score the MCQ.
     try:
-        step3_msg = config.user_message_mcq_3.format(
+        # Get prompts from settings if available, otherwise fall back to config
+        user_message_3 = settings.prompts.get("user_message_3") if hasattr(settings, "prompts") else config.user_message_3
+        system_message_3 = settings.prompts.get("system_message_3") if hasattr(settings, "prompts") else config.system_message_3
+
+        step3_msg = user_message_3.format(
             augmented_chunk=augmented_chunk,
-            generated_question=question,
-            generated_choices=choices
+            generated_question=generated_question
         )
-        step3_output = model.run(user_prompt=step3_msg, system_prompt=config.system_message_mcq_3)
+        step3_output = model.run(user_prompt=step3_msg, system_prompt=system_message_3)
         if config.shutdown_event.is_set():  # Check after model.run
             return (filename, linenum, chunknum, None, False)
         if step3_output is None:
             raise ValueError("model.run() returned None for step3_output.")
         step3_clean = step3_output.replace("```json", "").replace("```", "").strip()
-        parsed_json = step3_clean
-        parsed_json = json.loads(parsed_json)
-        score = parsed_json['score']
-        rationale = parsed_json['rationale']
+        parsed_json = robust_parse_json_output(step3_clean, model)
+        model_answer = str(parsed_json.get("answer", "")).strip()
         model_score = parsed_json.get("score", 0)
         pbar_total.set_postfix_str(f"Score: {model_score}")
 
-        if isinstance(model_score, int) and model_score > config.minScore:
-            config.logger.info(f"MCQ generated for chunk {chunknum} in file {filename}, score {model_score} > {config.minScore}.")
-            mcq = {
+        # Get minScore from settings if available, otherwise fall back to config
+        min_score = settings.quality.minScore if hasattr(settings, "quality") else config.minScore
+
+        if isinstance(model_score, int) and model_score > min_score:
+            config.logger.info(f"MCQ generated for chunk {chunknum} in file {filename}, score {model_score} > {min_score}.")
+            qa_pair = {
                 "file": filename,
                 "path": file_path,
                 "line": linenum,
                 "chunk": chunknum,
                 "model": model.model_name,
-                "question": question,
-                "choices": choices,
-                "reference_answer": reference_number,
-                "model_score": model_score, 
-                "rationale": rationale,
+                "question": generated_question,
+                "answer": model_answer,
                 "text": augmented_chunk
             }
             chunk_success = True
@@ -446,12 +336,12 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
     update_shared_counters(chunk_success, shared_counters, counter_lock)
     if chunk_success:
         pbar_success.update(1)
-    return (filename, linenum, chunknum, mcq, chunk_success)
+    return (filename, linenum, chunknum, qa_pair, chunk_success)
 
 
-def merge_mcq_output(out_file: str, new_mcqs: list) -> list:
+def merge_mcq_output(out_file: str, new_qa_pairs: list) -> list:
     """
-    Merge new MCQs with any existing MCQs in out_file using a unique MCQ identifier.
+    Merge new QA pairs with any existing MCQs in out_file using a unique MCQ identifier.
     Returns a merged list of MCQ dictionaries.
     """
     existing_mcqs = []
@@ -470,56 +360,12 @@ def merge_mcq_output(out_file: str, new_mcqs: list) -> list:
                         continue
         except Exception as e:
             config.logger.info(f"Error reading existing file {out_file}: {e}")
-    for mcq in new_mcqs:
-        mcq_id = (mcq.get('file'), mcq.get('line'), mcq.get('chunk'), mcq.get('model'))
+    for pair in new_qa_pairs:
+        mcq_id = (pair.get('file'), pair.get('line'), pair.get('chunk'), pair.get('model'))
         if mcq_id not in existing_ids:
-            existing_mcqs.append(mcq)
+            existing_mcqs.append(pair)
             existing_ids.add(mcq_id)
     return existing_mcqs
-
-
-def process_data_directory(model, input_dir: str, output_dir: str = "output_files",
-                      use_progress_bar: bool = True, parallel_workers: int = 4, force: bool = False):
-    """
-    Process all JSON files in input_dir by scheduling each file
-    as a separate task. If output files already exist and force is False,
-    those files are skipped.
-    Writes Data Items to output_dir in JSONL format.
-    """
-    config.logger.info(f"Run with {parallel_workers} threads.")
-
-    # Gather list of files.
-    all_files  = [f for f in os.listdir(input_dir) if f.lower().endswith(".json")]
-    total_files = len(all_files)
-
-    if total_files == 0:
-        config.logger.warning(f"No JSON files found in {input_dir}.")
-        return
-
-    file_results = {}
-
-    for filename in all_files:
-        fname, data, success = data_extract_from_file(model, filename)
-        if success:
-            file_results[filename] = data
-
-    # Write out data for each file.
-    os.makedirs(output_dir, exist_ok=True)
-    for filename in file_results:
-        data = file_results[filename]
-        base = os.path.splitext(fname)[0]
-        out_file = os.path.join(output_dir, f'processed_{base}_{model.shortname}.jsonl')
-        try:
-            with open(out_file, 'w', encoding='utf-8') as out_f:
-                out_f.write(data + "\n")
-            config.logger.info(f"Wrote Data Items to {out_file}")
-            print(f"Wrote Data Items of {len(data)} bytes to {out_file}")
-        except Exception as e:
-            if config.shutdown_event.is_set():
-                config.logger.info("Shutdown in progress; suppressing error details.")
-                return
-            else:
-                config.logger.error(f"Failed to write output file {out_file}: {e}")
 
 
 def process_directory(model, input_dir: str, output_dir: str = "output_files",
@@ -623,13 +469,15 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
         processed_chunks = {}  # filename -> set of (linenum, chunknum)
         for future in futures:
             try:
-                fname, linenum, chunknum, mcq, success = future.result(timeout=75)
-                if mcq is not None:
+                # Use settings timeout if available, otherwise use default
+                timeout_val = settings.timeout if hasattr(settings, "timeout") else 75
+                fname, linenum, chunknum, qa_pair, success = future.result(timeout=timeout_val)
+                if qa_pair is not None:
                     chunk_id = (linenum, chunknum)
                     if fname not in processed_chunks:
                         processed_chunks[fname] = set()
                     if chunk_id not in processed_chunks[fname]:
-                        file_results.setdefault(fname, []).append(mcq)
+                        file_results.setdefault(fname, []).append(qa_pair)
                         processed_chunks[fname].add(chunk_id)
             except TimeoutError:
                 config.logger.info("Chunk processing task timed out after 75s")
@@ -638,7 +486,7 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
                     config.logger.warning("Shutdown in progress; suppressing error details.")
                     return
                 else:
-                    config.logger.info(f"Error processing a chunk: {e}")
+                    config.logger.error(f"Error processing a chunk: {e}")
 
     if use_progress_bar:
         remaining = pbar_total.total - pbar_total.n
@@ -649,24 +497,24 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
 
     # Write out MCQs for each file.
     os.makedirs(output_dir, exist_ok=True)
-    for fname, mcqs in file_results.items():
+    for fname, qa_pairs in file_results.items():
         base = os.path.splitext(fname)[0]
         out_file = os.path.join(output_dir, f'processed_{base}.jsonl')
         try:
             if force:
                 with config.output_file_lock:
                     with open(out_file, 'a', encoding='utf-8') as out_f:
-                        for mcq in mcqs:
+                        for mcq in qa_pairs:
                             out_f.write(json.dumps(mcq, ensure_ascii=False) + "\n")
-                new_count = len(mcqs)
+                new_count = len(qa_pairs)
             else:
-                merged = merge_mcq_output(out_file, mcqs)
+                merged = merge_mcq_output(out_file, qa_pairs)
                 with config.output_file_lock:
                     with open(out_file, 'w', encoding='utf-8') as out_f:
                         for mcq in merged:
                             out_f.write(json.dumps(mcq, ensure_ascii=False) + "\n")
-                new_count = len(mcqs)
-            config.logger.info(f"Wrote {len(mcqs)} MCQs to {out_file} ({new_count} new)")
+                new_count = len(qa_pairs)
+            config.logger.info(f"Wrote {len(qa_pairs)} MCQs to {out_file} ({new_count} new)")
         except Exception as e:
             if config.shutdown_event.is_set():
                 config.logger.info("Shutdown in progress; suppressing error details.")
@@ -685,3 +533,5 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
             f"      Chunks processed:: {shared_counters}\n"
             f"      MCQs saved to {output_dir}."
         )
+
+

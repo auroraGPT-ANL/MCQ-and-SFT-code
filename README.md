@@ -32,6 +32,22 @@ The repository is organized as follows:
 * *src/test* - test routines including a stub model for testing workflows quickly without model delays (including offline testing), and
 * *legacy/scripts* shell script to execute workflow (replaced with a python script in *src/mcq\_workflow*).
 
+
+### Running Scripts with Module Imports
+
+To correctly run scripts that use relative imports, use the Python `-m` flag to run them as modules:
+
+```bash
+# From the repository root:
+python -m src.nugget_workflow.generate_nuggets -i _JSON -m test:all -v
+
+# Alternatively, add src to PYTHONPATH:
+PYTHONPATH=src python src/nugget_workflow/generate_nuggets.py -i _JSON -m test:all -v
+```
+
+This preserves the module structure regardless of the current working directory.
+
+
 **Contact:** Please email {foster|stevens|catlett}@anl.gov if you see things that are unclear or missing.
 
 ## MCQ Workflow
