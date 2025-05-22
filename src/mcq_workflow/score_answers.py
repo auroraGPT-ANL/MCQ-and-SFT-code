@@ -32,8 +32,8 @@ def score_answer(index: int,
     """
     # Get prompts from settings with fallback to config
     scoring_prompts = getattr(settings, 'scoring_prompts', {})
-    main_prompt = (scoring_prompts.get('main_mcq_prompt', None) 
-                  if isinstance(scoring_prompts, dict) 
+    main_prompt = (scoring_prompts.get('main_mcq_prompt', None)
+                  if isinstance(scoring_prompts, dict)
                   else config.score_main_prompt)
     main_system = (scoring_prompts.get('main_mcq_system', None)
                   if isinstance(scoring_prompts, dict)
@@ -141,7 +141,7 @@ def score_answers_file(
     else:
         config.logger.setLevel(logging.WARNING)
         use_bar = True
-    
+
     # Get default parallel workers from settings with fallback to config
     if parallel is None:
         parallel = settings.quality.defaultThreads if hasattr(settings, 'quality') else 4
@@ -220,7 +220,7 @@ def main():
     default_model_b = settings.workflow.target if hasattr(settings, 'workflow') else config.model_b['name']
     default_threads = settings.quality.defaultThreads if hasattr(settings, 'quality') else 4
     results_dir = settings.directories.results if hasattr(settings, 'directories') else config.results_dir
-    
+
     parser = argparse.ArgumentParser(
         description='Score answers: LLM B rates answers from LLM A'
     )

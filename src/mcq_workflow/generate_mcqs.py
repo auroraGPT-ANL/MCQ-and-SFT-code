@@ -5,34 +5,24 @@ generate_mcqs.py
 Main entry point for generating MCQs in parallel.
 Parses command-line arguments, initializes the model,
 then calls process_directory from mcq_util.
-
-Generate multiple‑choice questions (MCQs) from a text chunk.
-
-The script asks a language‑model to write **exactly one MCQ** with *n*
-numbered options ("1. …" .. "n. …") and marks the single correct
-answer with the suffix "(*)".  We then post‑process the model response
-into a dictionary that downstream scorers can consume:
-
-{
-    "question": "Which element has the chemical symbol Au?",
-    "choices" : ["1. Silver", "2. Gold", "3. Copper", "4. Argon"],
-    "reference": "2"                        # the correct option number
-}
 """
 
 import os
 import argparse
 from types import SimpleNamespace
-from common import config
+from common import config  # Keep for backward compatibility
+from common.settings import load_settings
 from common.model_access import Model
-from .mcq_util import process_directory
+from mcq_workflow.mcq_util import process_directory  # Use absolute import for module compatibility
+
+# Initialize settings
+settings = load_settings()
 
 
 def generate_mcqs_dir(input_dir: str,
                        output_dir: str,
                        model_name: str,
                        parallel_workers: int = 4,
-                       num_answers: int=7,
                        verbose: bool = False,
                        force: bool = False) -> str:
     """
@@ -78,23 +68,30 @@ def generate_mcqs_dir(input_dir: str,
 
 
 if __name__ == "__main__":
+    # Get directory values from settings with fallback to config
+    json_dir = settings.directories.json_dir if hasattr(settings, 'directories') else config.json_dir
+    mcq_dir = settings.directories.mcq if hasattr(settings, 'directories') else config.mcq_dir
+
+    # Get default model from settings workflow with fallback to config
+    default_model = settings.workflow.extraction if hasattr(settings, 'workflow') else config.defaultModel
+
     parser = argparse.ArgumentParser(
         description='Generate MCQs from JSON/JSONL files in parallel'
     )
     parser.add_argument(
         '-i', '--input',
         help='Directory containing input JSON/JSONL files',
-        default=config.json_dir
+        default=json_dir
     )
     parser.add_argument(
         '-o', '--output',
         help='Output directory for MCQs',
-        default=config.mcq_dir
+        default=mcq_dir
     )
     parser.add_argument(
         '-m', '--model',
         help='Model to use to generate MCQs',
-        default=config.defaultModel
+        default=default_model
     )
     parser.add_argument(
         '-q', '--quiet',
@@ -105,12 +102,6 @@ if __name__ == "__main__":
         '-v', '--verbose',
         action='store_true',
         help='Enable verbose logging'
-    )
-    parser.add_argument(
-        '-a', '--answers',
-        type=int,
-        default=7,
-        help='Number of answers to generate (default: 7)'
     )
     parser.add_argument(
         '-p', '--parallel',
@@ -127,17 +118,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Call the new Python API and capture the output directory
-    try:
-        mcq_outdir = generate_mcqs_dir(
-            input_dir=args.input,
-            output_dir=args.output,
-            model_name=args.model,
-            parallel_workers=args.parallel,
-            num_answers=args.answers,
-            verbose=args.verbose,
-            force=args.force,
-        )
-        # Print the resulting path for wrappers or agent capture
-        print(mcq_outdir)
-    except Exception as e:
-        print(f'Exception on input {args.input}: {e}')
+    mcq_outdir = generate_mcqs_dir(
+        input_dir=args.input,
+        output_dir=args.output,
+        model_name=args.model,
+        parallel_workers=args.parallel,
+        verbose=args.verbose,
+        force=args.force,
+    )
+    # Print the resulting path for wrappers or agent capture
+    print(mcq_outdir)
+

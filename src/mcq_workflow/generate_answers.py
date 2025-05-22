@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 generate_answers.py
 
@@ -9,52 +11,41 @@ import json
 import time
 import argparse
 import logging
-import json
 import concurrent.futures
 from typing import Union, List
 from tqdm import tqdm
 
-from common import config
+from common import config  # Keep for backward compatibility
+from common.settings import load_settings
 from common.model_access import Model
 
+# Initialize settings
+settings = load_settings()
 
-def process_mcq_item(mcq_item, index, model):
+
+def process_qa_item(qa_item, index, model):
     """
     Process a single QA pair:
-      - Extract the question and multiple choice answers
-      - Use the model to select one f the answers
+      - Extract the question and reference answer.
+      - Use the model to generate an answer.
       - Compute the generation time.
-      - Return a tuple (index, result) with the updated MCQ data.
+      - Return a tuple (index, result) with the updated QA data.
     """
+    question = qa_item.get("question", "")
+    reference_answer = qa_item.get("answer", "")
+    filename = qa_item.get("file", "")
+    filenum = qa_item.get("filenum", "")
+    chunknum = qa_item.get("chunknum", "")
 
-    question = mcq_item.get("question", "")
-    choices = mcq_item.get("choices", "")
-    reference_answer = mcq_item.get("reference_answer", "")
-    filename = mcq_item.get("file", "")
-    filenum = mcq_item.get("filenum", "")
-    chunknum = mcq_item.get("chunknum", "")
-
-    if not question or not choices or not reference_answer:
-        config.logger.info(f"Item {index} missing question, choices, or reference answer; skipping.")
+    if not question or not reference_answer:
+        config.logger.info(f"Item {index} missing question or reference answer; skipping.")
         return (index, None)
 
     start_time = time.time()
-
-    user_message = config.user_message_mcq_answer.format(num_answers=7, question=question, choices=choices)
-
     try:
-        #print('AAA', user_message)
-        #print('BBB', config.system_message_mcq_answer)
-        model_answer = model.run(user_prompt=user_message, system_prompt=config.system_message_mcq_answer)
-        #print(f'XXX-{model_answer}-XXX')
-        cleaned = model_answer.replace("```json", "").replace("```", "").strip()
-        model_answer2 = json.loads(cleaned)
-        answer = model_answer2['answer']
-        #comment = model_answer2['comment']
+        model_answer = model.run(question)
     except Exception as e:
         config.logger.error(f"Error processing item {index}: {e}")
-        #print('ERROR', model_answer)
-        #exit(1)
         return (index, None)
     gen_time = time.time() - start_time
 
@@ -64,25 +55,22 @@ def process_mcq_item(mcq_item, index, model):
         'chunknum': chunknum,
         'gen_time': f'{gen_time:.3f}',
         'question': question,
-	'choices': choices,
-        'model_answer': answer,
-        'reference_answer': reference_answer,
-        'answers_match': answer == int(reference_answer),
-        #'comment': comment,
-        'model': f'{model.model_type}:{model.model_name}'
+        'reference': reference_answer,
+        'model': model_answer
     }
     return (index, result)
 
 
 def generate_answers_file(
     input_file: str,
-    model_name: str = config.defaultModel,
+    model_name: str = None,  # Default will be set below from settings or config
     output_dir: str = None,
+    start_index: int = 0,
+    end_index: Union[int, str] = 'all',
     parallel: int = None,
     cache_dir: str = None,
     quiet: bool = False,
-    verbose: bool = False,
-    force: bool = False
+    verbose: bool = False
 ) -> str:
     """
     Generate model answers for MCQs stored in a JSON or JSONL file.
@@ -90,25 +78,19 @@ def generate_answers_file(
     Returns:
       The path to the output JSONL file.
     """
-    
+    # Get default model from settings with fallback to config
+    if model_name is None:
+        model_name = settings.workflow.extraction if hasattr(settings, 'workflow') else config.defaultModel
+
     if input_file is None:
-        # pick the first *.jsonl in config.mcq_dir
-        jsonl_files = [f for f in os.listdir(config.mcq_dir) if f.endswith(".jsonl")]
+        # Get mcq_dir from settings with fallback to config
+        mcq_dir = settings.directories.mcq if hasattr(settings, 'directories') else config.mcq_dir
+        jsonl_files = [f for f in os.listdir(mcq_dir) if f.endswith(".jsonl")]
         if not jsonl_files:
-            raise FileNotFoundError(f"No JSONL files found in {config.mcq_dir}")
-        input_file = os.path.join(config.mcq_dir, jsonl_files[0])
+            raise FileNotFoundError(f"No JSONL files found in {mcq_dir}")
+        input_file = os.path.join(mcq_dir, jsonl_files[0])
         config.logger.info(f"Using default MCQ file: {input_file}")
 
-    # Prepare output path
-    out_dir = output_dir or config.results_dir
-    os.makedirs(out_dir, exist_ok=True)
-    fname = f"answers_{model_name.replace('/','+')}.jsonl"
-    output_path = os.path.join(out_dir, fname)
-
-    if not force and os.path.exists(output_path):
-        print(f"Skipping as already exists: {output_path}")
-        config.logger.info(f"Skipping as already exists: {output_path}")
-        return
 
     # Configure verbosity
 
@@ -122,16 +104,15 @@ def generate_answers_file(
 
     # Resolve input file path
     if not os.path.isabs(input_file) and not os.path.exists(input_file):
-        input_file = os.path.join(config.mcq_dir, input_file)
+        mcq_dir = settings.directories.mcq if hasattr(settings, 'directories') else config.mcq_dir
+        input_file = os.path.join(mcq_dir, input_file)
 
     # Load data from JSON or JSONL
     data: List[dict] = []
     with open(input_file, 'r', encoding='utf-8') as f:
         content = f.read().strip()
     if not content:
-        #raise ValueError(f"Input file {input_file} is empty.")
-        print(f"Input file {input_file} is empty.")
-        return
+        raise ValueError(f"Input file {input_file} is empty.")
     if content[0] == '[':
         items = json.loads(content)
         for itm in items:
@@ -156,11 +137,27 @@ def generate_answers_file(
     if not data:
         raise ValueError("No valid items found in input file.")
 
-    total = len(data)
+    # Slice data between start_index and end_index
+    start = start_index
+    if end_index == 'all':
+        slice_data = data[start:]
+    else:
+        slice_data = data[start:int(end_index)]
+
+    total = len(slice_data)
     config.logger.info(f"Generating answers for {total} items with model {model_name}")
 
-    # Determine thread count
-    max_workers = parallel or config.defaultThreads
+    # Determine thread count - use settings with fallback to config
+    default_threads = settings.quality.defaultThreads if hasattr(settings, 'quality') else config.defaultThreads
+    max_workers = parallel or default_threads
+
+    # Prepare output path - use settings with fallback to config
+    results_dir = settings.directories.results if hasattr(settings, 'directories') else config.results_dir
+    out_dir = output_dir or results_dir
+    os.makedirs(out_dir, exist_ok=True)
+    suffix = f"_{start}_{end_index}" if start != 0 or end_index != 'all' else ''
+    fname = f"answers_{model_name.replace('/','+')}{suffix}.jsonl"
+    output_path = os.path.join(out_dir, fname)
 
     # Remove existing output
     if os.path.exists(output_path):
@@ -168,7 +165,7 @@ def generate_answers_file(
 
     # Execute in parallel
     buffer: List[dict] = []
-    save_int = config.saveInterval
+    save_int = settings.quality.save_interval if hasattr(settings, 'quality') else config.saveInterval
     model = Model(model_name)
     model.details()
 
@@ -180,8 +177,8 @@ def generate_answers_file(
     with open(output_path, 'a', encoding='utf-8') as out_f:
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
-                executor.submit(process_mcq_item, mcq, idx, model): idx
-                for idx, mcq in enumerate(data, start=1)
+                executor.submit(process_qa_item, qa, idx, model): idx
+                for idx, qa in enumerate(slice_data, start=1)
             }
             for fut in concurrent.futures.as_completed(futures):
                 idx, res = fut.result()
@@ -204,17 +201,22 @@ def generate_answers_file(
 
 
 def main():
+    # Get defaults from settings with fallback to config
+    default_model = settings.workflow.extraction if hasattr(settings, 'workflow') else config.defaultModel
+    default_threads = settings.quality.defaultThreads if hasattr(settings, 'quality') else config.defaultThreads
+
     parser = argparse.ArgumentParser(
         description='Generate answers for MCQs via LLM.'
     )
-    parser.add_argument('-m','--model',    default=config.defaultModel)
+    parser.add_argument('-m','--model',    default=default_model)
+    parser.add_argument('-s','--start',    type=int, default=0)
+    parser.add_argument('-e','--end',      default='all')
     parser.add_argument('-c','--cache-dir',default=os.getenv('HF_HOME'))
-    parser.add_argument('-i','--input',    default=None, help='JSON or JSONL file')
+    parser.add_argument('-i','--input',    default=None)
     parser.add_argument('-o','--output',   default=None)
-    parser.add_argument('-p','--parallel', type=int, default=config.defaultThreads)
+    parser.add_argument('-p','--parallel', type=int, default=default_threads)
     parser.add_argument('-q','--quiet',    action='store_true')
     parser.add_argument('-v','--verbose',  action='store_true')
-    parser.add_argument('-f','--force',    action='store_true')
     args = parser.parse_args()
 
     try:
@@ -222,11 +224,12 @@ def main():
             input_file   = args.input,
             model_name   = args.model,
             output_dir   = args.output,
+            start_index  = args.start,
+            end_index    = args.end,
             parallel     = args.parallel,
             cache_dir    = args.cache_dir,
             quiet        = args.quiet,
-            verbose      = args.verbose,
-            force        = args.force
+            verbose      = args.verbose
         )
         print(out_file)
     except Exception as e:
@@ -235,4 +238,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 

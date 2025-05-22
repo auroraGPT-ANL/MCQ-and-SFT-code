@@ -139,7 +139,7 @@ def count_chunks_in_file(filepath: str, chunk_size: int = CHUNK_SIZE) -> int:
             except json.JSONDecodeError:
                 continue
     except Exception as e:
-    config.logger.error(f"Failed to count chunks in file {filepath}: {e}")  # Keep using config.logger for compatibility
+        config.logger.error(f"Failed to count chunks in file {filepath}: {e}")  # Keep using config.logger for compatibility
     return total_chunks
 
 
