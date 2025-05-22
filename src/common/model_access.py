@@ -25,43 +25,50 @@ from requests.exceptions import Timeout
 from transformers import (AutoModelForCausalLM, AutoTokenizer,
                           GenerationConfig)
 
-from common import config
+# Import new settings system
+from common.settings import load_settings
+from common import config  # Keep for backward compatibility
 from common.inference_auth_token import get_access_token
 from common.exceptions import APITimeoutError
 from common.alcf_inference_utilities import get_names_of_alcf_chat_models
 from test.test_model import TestModel  # local stub for offline testing
 
-import torch
+# ---------------------------------------------------------------------------
+# Settings initialization
+# ---------------------------------------------------------------------------
+settings = load_settings()
 
 # ---------------------------------------------------------------------------
-# Local aliases for readability 
+# Local aliases for readability
 # ---------------------------------------------------------------------------
-logger = config.logger
-timeout = config.timeout
-initiate_shutdown = config.initiate_shutdown
-argo_user = config.argo_user
+logger = config.logger  # Keep logger from config module
+timeout = settings.timeout
+initiate_shutdown = config.initiate_shutdown  # Keep shutdown handling from config
+# Get argo_user from settings if available, otherwise from config for backward compatibility
+argo_user = settings.secrets.get("argo_username", config.argo_user)
 
 # Thread safety for error reporting
 error_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
-# Constants 
+# Constants
 # ---------------------------------------------------------------------------
 
 
 class Model:
     """Unified interface for multiple chat/completions back‑ends."""
-    
+
     # Class-level error tracking
     _api_error_counts = {
         'OpenAI': 0,
         'Argo': 0,
+        'CAFE': 0
     }
     _error_count_lock = threading.Lock()  # Lock for thread-safe counter updates
 
     # Core Methods
     # -----------------------------------------------------------------------
-    def __init__(self, model_name: str, parallel_workers: int = None, device_map: Any = None):
+    def __init__(self, model_name: str, parallel_workers: int = None):
         self.model_name = model_name
         self.parallel_workers = parallel_workers
         self.base_model: Any | None = None
@@ -79,7 +86,7 @@ class Model:
         # Branch on prefix -----------------------------------------------------
         if model_name.startswith("local:"):
             # ------------------------------------------------------------------
-            # Local vLLM server 
+            # Local vLLM server
             # ------------------------------------------------------------------
             self.model_name = model_name.split("local:")[1]
             self.model_type = "vLLM"
@@ -88,21 +95,21 @@ class Model:
 
         elif model_name.startswith("pb:"):
             # ------------------------------------------------------------------
-            # PBS‑launched Hugging‑Face model on HPC 
+            # PBS‑launched Hugging‑Face model on HPC
             # ------------------------------------------------------------------
             self._init_pbs_model(model_name)
 
         elif model_name.startswith("hf:"):
             # ------------------------------------------------------------------
-            # Local Hugging Face model 
+            # Local Hugging Face model
             # ------------------------------------------------------------------
             self._init_hf_model(model_name)
 
         elif model_name.startswith("alcf:"):
             self._init_alcf_model(model_name)
 
-        elif model_name.startswith("cels:"):
-            self._init_cels_model(model_name)
+        elif model_name.startswith("cafe:"):
+            self._init_cafe_model(model_name)
 
         elif model_name.startswith("openai:"):
             self._init_openai_model(model_name)
@@ -113,15 +120,12 @@ class Model:
         elif model_name.startswith("test:"):
             self._init_test_model(model_name)
 
-        elif model_name.startswith("bsc:"):
-            self._init_bsc_model(model_name)        
-
         else:
             logger.error(f"Unrecognised model specifier: {model_name}")
             initiate_shutdown("Model initialisation failed.")
 
     # -----------------------------------------------------------------------
-    #  Initialiser helpers 
+    #  Initialiser helpers
     # -----------------------------------------------------------------------
     def _init_pbs_model(self, model_name: str):
         self.model_name = model_name.split("pb:")[1]
@@ -147,8 +151,8 @@ class Model:
         logger.info(f"Loading local HF model: {self.model_name}")
 
         cache_dir = os.getenv("HF_HOME")
-        # Prefer secret token; fall back to file for legacy setups
-        self.key = config.get_secret("huggingface.token")
+        # Prefer secret token from settings; fall back to config and file for legacy setups
+        self.key = settings.secrets.get("huggingface_token") or config.get_secret("huggingface.token")
         if not self.key:
             try:
                 with open("hf_access_token.txt", "r", encoding="utf-8") as fh:
@@ -166,7 +170,7 @@ class Model:
         self.tokenizer.padding_side = "right"
         self.endpoint = "http://huggingface.co"
 
-    # "alcf:<model>" - ALCF 
+    # "alcf:<model>" - ALCF
     def _init_alcf_model(self, model_name: str):
         token = get_access_token()
         self.model_name = model_name.split("alcf:")[1]
@@ -177,37 +181,23 @@ class Model:
         self.key = token
         logger.info(f"ALCF model selected: {self.model_name}")
 
-
-    # "cels:<model>" - CELS models
-    def _init_cels_model(self, model_name: str):
-        if config.cels_model_servers == None:
-            initiate_shutdown('CELS models not configured')
-        self.shortname = model_name.split("cels:")[1]
-        print(f'Running CELS model {self.shortname}')
-
-        servers = [s for s in config.cels_model_servers if s.get("shortname") == self.shortname]
-        if len(servers)!=1:
-            initiate_shutdown(f'CELS model {self.shortname} not known')
-        server = servers[0]
-
-        self.model_name=server["openai_model"]
-        self.model_type = "OpenAI"
-        self.endpoint = server["openai_api_base"]
-        self.key = (
-            config.openai_access_token if server["openai_api_key"].startswith("${")
-            else server["openai_api_key"]
-        )
-
-        logger.info(f"CELS model: {self.model_name}")
+    # "cafe:<model>" - Rick's secret server
+    def _init_cafe_model(self, model_name: str):
+        self.model_name = model_name.split("cafe:")[1]
+        self.model_type = "CAFE"
+        self.endpoint = "https://195.88.24.64/v1"
+        self.key = "CELS"  # placeholder
+        logger.info(f"Cafe model: {self.model_name}")
 
     # "openai:<model>" - OpenAI
     def _init_openai_model(self, model_name: str):
         self.model_name = model_name.split("openai:")[1]
         self.model_type = "OpenAI"
-        self.endpoint = config.model_type_endpoints['openai']
+        # Try to get endpoint from settings, fall back to config for backward compatibility
+        self.endpoint = settings.endpoints.get("openai", {}).get("base_url") if "openai" in settings.endpoints else config.model_type_endpoints['openai']
 
-        # look first in secrets.yml; fall back to openai_access_token.txt and nudge the user to use secrets.yml
-        self.key = config.get_secret("openai.access_token")
+        # look first in settings.secrets; fall back to config and then to openai_access_token.txt
+        self.key = settings.secrets.get("openai_access_token") or config.get_secret("openai.access_token")
         if not self.key:
             try:
                 with open("openai_access_token.txt", "r", encoding="utf-8") as fh:
@@ -229,11 +219,17 @@ class Model:
         prefix, model = model_name.split(":")
         self.model_name = model
         self.model_type = "Argo"
-        # Select endpoint based on prefix
-        self.endpoint = config.model_type_endpoints['argo_dev'] if prefix == "argo-dev" else config.model_type_endpoints['argo']
-        self.argo_user = argo_user or config.get_secret("argo.username")
+        # Select endpoint based on prefix, using settings if available
+        endpoint_key = "argo_dev" if prefix == "argo-dev" else "argo"
+        if endpoint_key in settings.endpoints:
+            self.endpoint = settings.endpoints[endpoint_key].base_url
+        else:
+            # Fall back to config for backward compatibility
+            self.endpoint = config.model_type_endpoints['argo_dev'] if prefix == "argo-dev" else config.model_type_endpoints['argo']
+
+        self.argo_user = settings.secrets.get("argo_username") or argo_user or config.get_secret("argo.username")
         if not self.argo_user:
-            initiate_shutdown("Argo username not found in secrets.yml.")
+            initiate_shutdown("Argo username not found in settings or secrets.yml.")
         self.key = "sk‑dummy‑key"  # placeholder for OpenAI‑compatible header
         logger.info(f"Argo model: {self.model_name} (user = {self.argo_user})")
 
@@ -245,40 +241,8 @@ class Model:
         self.test_model = TestModel(self.model_name)
         logger.info(f"Loaded TestModel stub ({self.model_name})")
 
-    
-    def _init_bsc_model(self, model_name: str, device_map: Any = None):
-        # strip off the "bsc:" prefix to get the folder name
-        self.model_name = model_name.split("bsc:", 1)[1]
-        self.model_type = "Huggingface"
-        self.temperature = 0.0
-
-        # path to your local model directory
-        model_dir = os.path.join(config.bsc_model_root, self.model_name)
-        logger.info(f"Loading BSC model from {model_dir}")
-
-        # no endpoint or credentials needed
-        self.endpoint = None
-        self.key = None
-
-
-        # load tokenizer & model onto GPU(s)
-        self.tokenizer = AutoTokenizer.from_pretrained(model_dir)
-        self.base_model = AutoModelForCausalLM.from_pretrained(
-            model_dir,
-            device_map=device_map or "auto",    # auto-shard or pin to provided map
-            torch_dtype=torch.float16          # use FP16 to save memory
-        )
-
-        # ensure pad/eos tokens are set
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-        self.base_model.config.pad_token_id = self.tokenizer.pad_token_id
-        self.tokenizer.padding_side = "right"
-
-        
-
     # -----------------------------------------------------------------------
-    #  PBS helper methods 
+    #  PBS helper methods
     # -----------------------------------------------------------------------
     def wait_for_job_to_start(self):
         """Monitor job status and get assigned compute node"""
@@ -371,6 +335,9 @@ class Model:
             }
             return self._handle_api_model_request(user_prompt, system_prompt, temperature, extra_data)
 
+        elif self.model_type == 'CAFE':
+            return self._handle_api_model_request(user_prompt, system_prompt, temperature)
+
         elif self.model_type == 'Test':
             return self.test_model.generate_response(user_prompt, system_prompt)
 
@@ -378,7 +345,6 @@ class Model:
             logger.error(f"Unknown model type: {self.model_type}.")
             initiate_shutdown("Unknown model type. Exiting.")
 
-    # -----------------------------------------------------------------------
     # Error Handling Methods
     # -----------------------------------------------------------------------
     def _get_error_threshold(self) -> int:
@@ -408,7 +374,7 @@ class Model:
         with self._error_count_lock:
             if self.model_type not in self._api_error_counts:
                 return True  # Non-tracked model types exit immediately
-            
+
             self._api_error_counts[self.model_type] += 1
             threshold = self._get_error_threshold()
             current = self._api_error_counts[self.model_type]
@@ -419,7 +385,7 @@ class Model:
         """Thread-safe handling of API errors."""
         error_str = str(error)
         with error_lock:
-            if not config.shutdown_event.is_set():
+            if not hasattr(config, 'shutdown_event') or not config.shutdown_event.is_set():
                 # Auth failures always exit immediately
                 if "401" in error_str or "Unauthorized" in error_str:
                     logger.error(f"{self.model_type} authentication failed: {error_str[:80]}...")
@@ -438,14 +404,14 @@ class Model:
     # -----------------------------------------------------------------------
     def _create_http_session(self) -> requests.Session:
         """Create an HTTP session with configured retry and timeout settings."""
-        if config.shutdown_event.is_set():
+        if hasattr(config, 'shutdown_event') and config.shutdown_event.is_set():
             return None
-            
+
         session = requests.Session()
         adapter = requests.adapters.HTTPAdapter(
-            max_retries=config.http_client.get("max_retries", 1),
-            pool_connections=config.http_client.get("pool_connections", 1),
-            pool_maxsize=config.http_client.get("pool_maxsize", 1)
+            max_retries=settings.http_client.max_retries,
+            pool_connections=settings.http_client.pool_connections,
+            pool_maxsize=settings.http_client.pool_maxsize
         )
         session.mount('http://', adapter)
         session.mount('https://', adapter)
@@ -460,9 +426,9 @@ class Model:
         if not session:
             return None
 
-        connect_timeout = config.http_client.get("connect_timeout", 3.05)
-        read_timeout = config.http_client.get("read_timeout", 10)
-        
+        connect_timeout = settings.http_client.connect_timeout
+        read_timeout = settings.http_client.read_timeout
+
         try:
             resp = session.post(
                 url,
@@ -517,15 +483,15 @@ class Model:
         return response_text
 
     def _handle_api_model_request(self, user_prompt: str, system_prompt: str, temperature: float, extra_data: dict = None) -> str:
-        """Common handler for API-based models (vLLM, Argo)"""
+        """Common handler for API-based models (vLLM, Argo, CAFE)"""
         data = self._format_chat_request(user_prompt, system_prompt, temperature)
         if extra_data:
             data.update(extra_data)
-        
+
         resp = self._make_api_request(self._normalize_url(self.endpoint), data)
         if resp is None:
             return ""
-            
+
         try:
             return self._extract_response_content(resp.json())
         except Exception as e:
@@ -552,24 +518,24 @@ class Model:
         except Exception as e:
             return self._handle_api_error(e)
 
-
 def run_hf_model(input_text, base_model, tokenizer):
     """
-    Generate text from a local HF model, then format as {"augmented_chunk": ...}.
-    Includes fallback scoring logic if JSON parse fails.
+    Generate text from a local HF model.
+    Example usage for demonstration purposes only.
     """
     if base_model is None or tokenizer is None:
-        return json.dumps({"augmented_chunk": "HF model or tokenizer not loaded."})
+        return "HF model or tokenizer not loaded."
 
     inputs = tokenizer(input_text, return_tensors="pt", padding=True)
-    device = next(base_model.parameters()).device
-    inputs = {k: v.to(device) for k, v in inputs.items()}
+    input_ids = inputs["input_ids"].to("cuda")
+    attention_mask = inputs["attention_mask"].to("cuda")
 
-    output_ids = base_model.generate(
-        inputs["input_ids"],
-        attention_mask=inputs.get("attention_mask"),
-        max_new_tokens=512,
-        pad_token_id=tokenizer.pad_token_id,
+    output = base_model.generate(
+        input_ids,
+        attention_mask=attention_mask,
+        max_length=512,
+        pad_token_id=tokenizer.pad_token_id
     )
-    raw_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-    return raw_text
+    generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
+    return generated_text
+

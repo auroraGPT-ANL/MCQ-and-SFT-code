@@ -1,0 +1,19 @@
+# CONFIG.LOCAL.YML TEMPLATE
+# Copy this file to config.local.yml and customize for your personal workflow
+# This file should be git-ignored to prevent merge conflicts
+
+# Model workflow configuration
+# - extraction: model used to generate MCQs/facts
+# - contestants: all models to be evaluated (must include extraction and target)
+# - target: model to be fine-tuned (must be in contestants list)
+workflow:
+  extraction: llama3
+  contestants: [llama3, gpt4o]
+  target: llama3
+
+# Default temperature for model generation
+default_temperature: 0.35
+
+# Add any other personal configuration overrides below
+# These will take precedence over repo-wide settings in config.yml
+
