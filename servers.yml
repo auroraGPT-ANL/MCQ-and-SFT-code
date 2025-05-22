@@ -1,0 +1,45 @@
+# CELS Server Configurations for robin_testing_v2.py
+# Last updated: 2025-04-20
+servers:
+  # optillm on top of scout
+  - server: "localhost"
+    shortname: "CePO"
+    openai_api_key: "no_key"
+    openai_api_base: "http://127.0.0.1:8898/v1"
+    openai_model: "llama-4-scout-17b-16e-instruct"
+  # Scout model on rbh101 server
+  - server: "rbh101.cels.anl.gov"
+    shortname: "scout"
+    openai_api_key: "CELS"
+    openai_api_base: "http://66.55.67.65:80/v1"
+    openai_model: "scout"
+  # Qwen model on hcdgx2 server
+  - server: "hcdgx2.cels.anl.gov"
+    shortname: "qwen"
+    openai_api_key: "CELS"
+    openai_api_base: "http://103.101.203.226:80/v1"
+    openai_model: "Qwen"
+  # Llama 3.3 70B model on rbdgx2 server
+  - server: "rbdgx2.cels.anl.gov"
+    shortname: "llama"
+    openai_api_key: "CELS"
+    openai_api_base: "http://195.88.24.64:80/v1"
+    openai_model: "meta-llama/Llama-3.3-70B-Instruct"
+  # OpenAI GPT-4.1
+  - server: "api.openai.com"
+    shortname: "gpt41"
+    openai_api_key: "${OPENAI_API_KEY}"
+    openai_api_base: "https://api.openai.com/v1"
+    openai_model: "gpt-4.1"
+  # O3-mini-high model
+  - server: "api.openai.com"
+    shortname: "o3"
+    openai_api_key: "${OPENAI_API_KEY}"
+    openai_api_base: "https://api.openai.com/v1"
+    openai_model: "o3"
+  # O4-mini
+  - server: "api.openai.com"
+    shortname: "o4mini"
+    openai_api_key: "${OPENAI_API_KEY}"
+    openai_api_base: "https://api.openai.com/v1"
+    openai_model: "o4-mini"
