@@ -15,7 +15,9 @@ A second workflow, **New Knowledge Nugget (NKN) Workflow**, still under construc
 2.  Use an AI model to extract Knowlege Nuggets from each paper.  Each paper is split into n-token *chunks*, and the will extract knowledge nuggets from each.
 3.  Test each nugget using a model to be fine-tuned, eliminating nuggets that are already known to the model. This will create a set of *New* Knowledge Nuggets (NKNs) for fine-tuning the target model.
 
-The current, stable mcq\_workflow system operates from the command line, where each component of the workflow can be run as a stand-alone tool or as part of a shell script, 'legacy/scripts/run\_mcq\_workflow.sh'. This script implements the workflow as illustrated in 
+The current, stable mcq\_workflow system operates from the command line, where each component of the workflow can be run as a stand-alone tool or as part of a pre-defined workflow implemented in
+'src/mcq\_workflow/run\_workflow'.
+This script implements the workflow as illustrated in 
 [this flowchart](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/CeC/MCQ-Workflow.png). If only interested in this version, and not tinkering, you may prefer to download the
 [Stable-Snapshot: Version-1](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/releases/tag/Stable-V1)
 release (tagged in this repo as
@@ -159,17 +161,17 @@ models, see **Models** below.
 
 Run with default 8-way parallel, in verbose mode to see progress messages
 ```bash
-./legacy/scripts/run_mcq_workflow.sh -v
+python -m mcq_workflow.run_workflow -v
 ```
 
 Run with 16-way parallel
 ```bash
-./legacy/scripts/run_mcq_workflow.sh -p 16
+python -m mcq_workflow.run_workflow -p 16
 ```
 
 Run with 20 randomly selected MCQs
 ```bash
-./legacy/scripts//run_mcq_workflow.sh -n 20
+python -m mcq_workflow.run_workflow -n 20
 ```
 
 ### Detailed Step-by-Step Workflow
@@ -195,7 +197,7 @@ Generate MCQs (using default or specified model)
 ```bash
 python -m mcq_workflow.generate_mcqs
 ```
-or to specify a different model than in *config.yml*:
+or to specify a different model than in *config.local.yml*:
 ```bash
 python -m mcq_workflow.generate_mcqs -m 'alcf:mistralai/Mistral-7B-Instruct-v0.3'
 ```
@@ -212,22 +214,22 @@ python -m common.select_mcqs_at_random -i MCQ-combined.json -o MCQ-subset.json -
 ```
 
 #### 5. Generate Answers
-Using model from config.yml
+Using model specified in config.local.yml
 ```bash
 python -m mcq_workflow.generate_answers -i MCQ-subset.json
 ```
-Or to specify a different model than the one in *config.yml*:
+Or to specify a different model than the one in *config.local.yml*:
 ```bash
 python -m mcq_workflow.generate_answers -i MCQ-subset.json -m 'alcf:meta-llama/Meta-Llama-3-70B-Instruct'
 ```
 
 #### 6. Score Answers
-Using models from config.yml
+Using models from config.local.yml
 ```bash
 python -m mcq_workflow.score_answers
 ```
 
-Or to specify models explicitly (different than the ones in *config.yml*:
+Or to specify models explicitly (different than the ones in *config.local.yml*:
 ```bash
 python -m mcq_workflow.score_answers -a 'model-A' -b 'model-B'
 ```
@@ -239,17 +241,18 @@ python -m mcq_workflow.review_status
 
 ## Configuration
 
-### config.yml
+### config.yml and config.local.yml
 
-The `config.yml` file allows you to:
-- Specify default directories
-- Define models for each workflow stage
-- Set parallelization options
-- Tweak prompts (carefully)
+The `config.yml` file includes relatively static configuraiton including:
+- default directories
+- parallelization options
+- prompts 
+
+The 'config.local.yml' file is where you specify the model(s) that you wish to use as you run the tools and workflow.
 
 To run any of these scripts or workflows, you must specify a model using the form *location:model_name*.  
 The *location* portion indicates how to access the model (endpoints, etc.), which is handled in 
-*common/model_access.py*.  This workflow has been tested with locations *local*, *alcf*, and *argo*.
+*common/model_access.py*.  
 
 Where credentials are required, place them in a secrets.yml file (which is .gitignored to avoid accidental
 sharing to the world via github).
