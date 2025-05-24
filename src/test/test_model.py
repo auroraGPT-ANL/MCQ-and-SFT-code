@@ -9,7 +9,7 @@ Aligns with the endpoint-based configuration system.
 import json
 import logging
 from typing import Optional, Dict, Any
-from common.settings import load_settings
+from common.loader import load_settings
 
 logger = logging.getLogger(__name__)
 

@@ -5,7 +5,7 @@
 import os
 import argparse
 from common import config  # Keep for backward compatibility
-from common.settings import load_settings
+from common.loader import load_settings
 from common.model_access import Model
 from nugget_workflow.nugget_utils import process_directory
 

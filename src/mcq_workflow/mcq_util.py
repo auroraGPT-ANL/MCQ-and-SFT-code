@@ -31,7 +31,7 @@ import spacy
 import re
 from tqdm import tqdm
 from concurrent.futures import TimeoutError
-from common.settings import load_settings
+from common.loader import load_settings
 from common import config  # Keep for backward compatibility
 
 # Initialize settings

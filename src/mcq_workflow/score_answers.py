@@ -15,7 +15,7 @@ from typing import Optional, List, Tuple
 from tqdm import tqdm
 
 from common import config  # Keep for backward compatibility
-from common.settings import load_settings
+from common.loader import load_settings
 from common.model_access import Model
 
 # Initialize settings

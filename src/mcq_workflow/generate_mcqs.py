@@ -11,7 +11,7 @@ import os
 import argparse
 from types import SimpleNamespace
 from common import config  # Keep for backward compatibility
-from common.settings import load_settings
+from common.loader import load_settings
 from common.model_access import Model
 from mcq_workflow.mcq_util import process_directory  # Use absolute import for module compatibility
 
