@@ -53,8 +53,8 @@ def main():
                         help="Select n random MCQs")
     parser.add_argument("-s", "--step", type=int, default=1,
                         help="Step number to start from (1–5)")
-    parser.add_argument("-a", "--answers", type=int, default=7,
-                        help="Number of answers to generate")
+    parser.add_argument("-a", "--answers", type=int, 
+                        help="Number of answer choices to generate per MCQ")
     args = parser.parse_args()
 
     p_value = args.p
@@ -79,7 +79,9 @@ def main():
     # Step 2: Generate MCQs
     if start_step <= 2:
         print("Step 2: Generate MCQs")
-        run(f"python -m mcq_workflow.generate_mcqs -p {p_value} -a {num_answers} {v_flag}")
+        # Only pass -a parameter if explicitly specified by user
+        answers_option = f"-a {num_answers}" if args.answers is not None else ""
+        run(f"python -m mcq_workflow.generate_mcqs -p {p_value} {answers_option} {v_flag}")
 
     # Step 3: Combine JSON files
     if start_step <= 3:
@@ -120,12 +122,12 @@ def main():
             if p.returncode != 0:
                 sys.exit(p.returncode)
 
-    # Step 5: Retrieve answers and count correct
+    # Step 5: Retrieve answers for all models
     if start_step <= 5:
         print("Step 5: Retrieve answers for all models")
-        for file in glob.glob('_RESULTS/answers*'):
-            #print(f'Processing file {file}')
-            cmd = (f"python -m mcq_workflow.retrieve_results  {v_flag}")
+        for _ in glob.glob('_RESULTS/answers*'):
+            cmd = f"python -m mcq_workflow.retrieve_results {v_flag}"
+            run(cmd)
 
     # Final timing
     elapsed = int(time.time() - start_time)
