@@ -39,29 +39,27 @@ if not logger.handlers:
 # ---------------------------------------------------------------------------
 #  Graceful‑shutdown helpers
 # ---------------------------------------------------------------------------
-output_file_lock = threading.Lock()  # global lock for file I/O
+output_file_lock = threading.Lock()
 shutdown_event = threading.Event()
 
 
-def _handle_sigint(signum, frame):  # noqa: D401, unused‑arg
-    """Set the shutdown flag so worker threads can exit cleanly."""
+def _handle_sigint(signum, frame):
     shutdown_event.set()
-    logger.warning("Interrupt received – shutting down after workers finish (could take 60-90s)")
+    logger.warning("Interrupt received – shutting down after workers finish (could take 60-90s)")
 
 
 def initiate_shutdown(message: str = "Shutting down.") -> None:
     logger.error(message)
     shutdown_event.set()
-    #raise SystemExit(message) # this line plus logger.error above double- reports - substituting with:
     sys.exit(1)
 
 
 signal.signal(signal.SIGINT, _handle_sigint)
 
 # ---------------------------------------------------------------------------
-#  Progress‑bar stub for quiet mode
+#  Progress‑bar stub
 # ---------------------------------------------------------------------------
-class NoOpTqdm:  # noqa: D101
+class NoOpTqdm:
     def __init__(self, total: int = 0, desc: str = "", unit: str = ""):
         self.total = total
         self.n = 0
@@ -79,8 +77,7 @@ class NoOpTqdm:  # noqa: D101
 #  Verbosity helper
 # ---------------------------------------------------------------------------
 
-def configure_verbosity(args) -> bool:  # noqa: ANN001 – argparse.Namespace
-    """Return *True* if a progress‑bar should be used based on CLI flags."""
+def configure_verbosity(args) -> bool:
     if getattr(args, "verbose", False):
         logger.setLevel(logging.INFO)
         logger.info("Verbose mode.")
@@ -107,54 +104,35 @@ def _safe_load_yaml(path: str) -> dict[str, Any]:
 
 
 def load_config(path: str | None = None) -> dict[str, Any]:
-    """Load *config.yml* (or a custom path)."""
     path = path or CONFIG_YML_PATH
     if not os.path.exists(path):
         raise FileNotFoundError(f"config '{path}' not found")
-    try:
-        return _safe_load_yaml(path)
-    except yaml.YAMLError as exc:  # pragma: no cover
-        logger.error(f"Error parsing YAML file '{path}': {exc}")
-        raise
+    return _safe_load_yaml(path)
+
 
 def load_local_config() -> dict[str, Any]:
-    """Load config.local.yml if it exists."""
     if not os.path.exists(CONFIG_LOCAL_YML_PATH):
-        logger.error(f"Local config '{CONFIG_LOCAL_YML_PATH}' not found")
-        sys.exit(1)
-    try:
-        return _safe_load_yaml(CONFIG_LOCAL_YML_PATH)
-    except yaml.YAMLError as exc:
-        logger.error(f"Error parsing YAML file '{CONFIG_LOCAL_YML_PATH}': {exc}")
-        raise
+        return {}
+    return _safe_load_yaml(CONFIG_LOCAL_YML_PATH)
+
 
 def load_secrets(cfg: dict[str, Any]) -> dict[str, Any]:
-    """Load the secrets file referred to in *config.yml* (returns empty dict if absent)."""
     rel_path = cfg.get("argo", {}).get("username_file")
-    #print('REL', rel_path)
     if not rel_path:
         logger.warning("No secrets file specified in config.yml")
         return {}
-    secrets_path = rel_path if os.path.isabs(rel_path) else os.path.join(REPO_ROOT, rel_path)
-    #print('SP', secrets_path)
-    if not os.path.exists(secrets_path):
-        #print(f"Secrets file '{secrets_path}' not found")
-        logger.warning(f"Secrets file '{secrets_path}' not found")
+    sp = rel_path if os.path.isabs(rel_path) else os.path.join(REPO_ROOT, rel_path)
+    if not os.path.exists(sp):
+        logger.warning(f"Secrets file '{sp}' not found")
         return {}
-    try:
-        return _safe_load_yaml(secrets_path)
-    except yaml.YAMLError as exc:
-        logger.error(f"YAML error in secrets file '{secrets_path}': {exc}")
-        return {}
-
+    return _safe_load_yaml(sp)
 
 # ---------------------------------------------------------------------------
 #  Public helper to fetch secrets
 # ---------------------------------------------------------------------------
 
 def get_secret(path: str, default: Any = None) -> Any:
-    """Retrieve a secret with dotted notation, e.g. ``get_secret('argo.username')``."""
-    node: Any = _SECRETS
+    node = _SECRETS
     for part in path.split("."):
         if not isinstance(node, dict) or part not in node:
             return default
@@ -162,7 +140,7 @@ def get_secret(path: str, default: Any = None) -> Any:
     return node
 
 # ---------------------------------------------------------------------------
-#  Load config + secrets once at import time
+#  Load config + secrets once
 # ---------------------------------------------------------------------------
 
 _CONFIG = load_config()
@@ -170,36 +148,27 @@ _LOCAL_CONFIG = load_local_config()
 _SECRETS = load_secrets(_CONFIG)
 
 try:
-    _SERVERS = load_config('servers.yml')
+    _SERVERS = load_config("servers.yml")
     cels_model_servers = _SERVERS.get("servers", {})
-except:
-    print('File servers.yml not found')
-    _SERVERS = None
+except FileNotFoundError:
     cels_model_servers = None
 
-# convenience for legacy code
 argo_user = get_secret("argo.username")
-if not argo_user:
-    logger.warning("Argo username not found in secrets file.")
-
-# convenience for OpenAI
 openai_access_token = get_secret("openai.access_token")
-if not openai_access_token:
-    logger.warning(
-        "OpenAI access token not found in secrets file; "
-        "will fall back to openai_access_token.txt"
-    )
 
+# ---------------------------------------------------------------------------
+#  Workflow configuration
+# ---------------------------------------------------------------------------
+_workflow_cfg = _CONFIG.get("workflow", {}).copy()
+_workflow_cfg.update(_LOCAL_CONFIG.get("workflow", {}))
+workflow = _workflow_cfg
 
 # ---------------------------------------------------------------------------
 #  Unpack frequently‑used config fields
 # ---------------------------------------------------------------------------
 
-# Models
-# Model endpoints
 model_type_endpoints = _CONFIG.get("model_type_endpoints", {})
 
-# HTTP client settings
 http_client = _CONFIG.get("http_client", {
     "connect_timeout": 3.05,
     "read_timeout": 10,
@@ -221,53 +190,6 @@ defaultModelB = _model_name(model_b) or _CONFIG.get("defaultModelB")
 defaultModelC = _model_name(model_c)
 defaultModelD = _model_name(model_d)
 
-# Prompts
-prompts = _CONFIG.get("prompts", {})
-system_message_1 = prompts.get("system_message_1", "")
-user_message_1   = prompts.get("user_message_1", "")
-system_message_mcq_2 = prompts.get("system_message_mcq_2", "")
-user_message_mcq_2   = prompts.get("user_message_mcq_2", "")
-system_message_mcq_3 = prompts.get("system_message_mcq_3", "")
-user_message_mcq_3   = prompts.get("user_message_mcq_3", "")
-
-# Fact‑extraction prompts
-fact_extraction_system = prompts.get("fact_extraction_system", "")
-fact_extraction_user   = prompts.get("fact_extraction_user", "")
-
-# New
-extract_prompts = _CONFIG.get("extract_prompts", {})
-extract_user_prompt = extract_prompts.get('user_message_data_extract', '')
-extract_system_prompt = extract_prompts.get('system_message_data_extract', '')
-
-# MCQ answering prompts
-answering_prompts = _CONFIG.get("answering_prompts", {})
-system_message_mcq_answer = answering_prompts.get("system_message_mcq_answer", "")
-user_message_mcq_answer = answering_prompts.get("user_message_mcq_answer", "")
-
-# Scoring prompts for MCQs and QA pairs
-scoring_prompts           = _CONFIG.get("scoring_prompts", {})
-score_main_mcq_system     = scoring_prompts.get("main_mcq_system", "")
-score_main_mcq_prompt     = scoring_prompts.get("main_mcq_prompt", "")
-score_fallback_mcq_system = scoring_prompts.get("fallback_mcq_system", "")
-score_fallback_mcq_prompt = scoring_prompts.get("fallback_mcq_prompt", "")
-
-score_main_qa_system      = scoring_prompts.get("main_qa_system", "")
-score_main_qa_prompt      = scoring_prompts.get("main_qa_prompt", "")
-score_fallback_qa_system  = scoring_prompts.get("fallback_qa_system", "")
-score_fallback_qa_prompt  = scoring_prompts.get("fallback_qa_prompt", "")
-
-# Nugget prompts
-nugget_prompts = _CONFIG.get("nugget_prompts", {})
-
-# Runtime parameters
-timeout        = _CONFIG.get("timeout", 60)
-quality        = _CONFIG.get("quality", {})
-minScore       = quality.get("minScore", 7)
-chunkSize      = quality.get("chunkSize", 1024)
-saveInterval   = quality.get("saveInterval", 50)
-defaultThreads = quality.get("defaultThreads", 4)
-
-# Data directories
 _dirs = _CONFIG.get("directories", {})
 papers_dir  = os.path.join(REPO_ROOT, _dirs.get("papers",   "_PAPERS"))
 json_dir    = os.path.join(REPO_ROOT, _dirs.get("json",     "_JSON"))

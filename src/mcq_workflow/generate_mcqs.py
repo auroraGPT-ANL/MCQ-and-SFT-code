@@ -24,7 +24,8 @@ def generate_mcqs_dir(input_dir: str,
                        model_name: str,
                        parallel_workers: int = 4,
                        verbose: bool = False,
-                       force: bool = False) -> str:
+                       force: bool = False,
+                       num_answers: int = 4) -> str:
     """
     Generate MCQs from JSON/JSONL files.
 
@@ -35,6 +36,7 @@ def generate_mcqs_dir(input_dir: str,
       parallel_workers: number of parallel threads
       verbose: enable verbose logging
       force: force reprocessing even if outputs exist
+      num_answers: number of answer choices to generate (default: 4)
 
     Returns:
       The path to the directory where MCQs were written.
@@ -60,6 +62,7 @@ def generate_mcqs_dir(input_dir: str,
             use_progress_bar=use_progress_bar,
             parallel_workers=parallel_workers,
             force=force,
+            num_answers=num_answers,  # Pass through num_answers parameter
         )
     except KeyboardInterrupt:
         config.initiate_shutdown("User Interrupt - initiating shutdown.")
@@ -114,6 +117,12 @@ if __name__ == "__main__":
         action='store_true',
         help='Force reprocessing files to generate (and append) MCQs even if output files exist.'
     )
+    parser.add_argument(
+        '-a', '--answers',
+        type=int,
+        default=4,
+        help='Number of answers to generate (default: 4)'
+    )
 
     args = parser.parse_args()
 
@@ -125,6 +134,7 @@ if __name__ == "__main__":
         parallel_workers=args.parallel,
         verbose=args.verbose,
         force=args.force,
+        num_answers=args.answers,
     )
     # Print the resulting path for wrappers or agent capture
     print(mcq_outdir)

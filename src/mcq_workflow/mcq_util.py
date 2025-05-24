@@ -28,6 +28,7 @@ import re
 import threading
 import time
 import spacy
+import re
 from tqdm import tqdm
 from concurrent.futures import TimeoutError
 from common.settings import load_settings
@@ -225,7 +226,8 @@ TEXT TO FIX:
 
 
 def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
-                  pbar_total, pbar_success, shared_counters, counter_lock):
+                  pbar_total, pbar_success, shared_counters, counter_lock, 
+                  num_answers: int = 4):
     """
     Process a single chunk in three sequential steps:
       1. Summarize & expand the chunk.
@@ -243,8 +245,8 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
     # Step 1: Summarize & Expand.
     try:
         # Get prompts from settings if available, otherwise fall back to config
-        user_message = settings.prompts.get("user_message") if hasattr(settings, "prompts") else config.user_message
-        system_message = settings.prompts.get("system_message") if hasattr(settings, "prompts") else config.system_message
+        user_message = settings.prompts.get("user_message_1") if hasattr(settings, "prompts") else config.user_message
+        system_message = settings.prompts.get("system_message_1") if hasattr(settings, "prompts") else config.system_message
 
         step1_msg = user_message.format(chunk=chunk)
         step1_output = model.run(user_prompt=step1_msg, system_prompt=system_message)
@@ -271,13 +273,18 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
     # Step 2: Generate the MCQ.
     try:
         # Get prompts from settings if available, otherwise fall back to config
-        user_message_2 = settings.prompts.get("user_message_2") if hasattr(settings, "prompts") else config.user_message_2
-        system_message_2 = settings.prompts.get("system_message_2") if hasattr(settings, "prompts") else config.system_message_2
+        user_message_2 = settings.prompts.get("user_message_mcq_2") if hasattr(settings, "prompts") else config.user_message_2
+        system_message_2 = settings.prompts.get("system_message_mcq_2") if hasattr(settings, "prompts") else config.system_message_2
 
-        step2_msg = user_message_2.format(augmented_chunk=augmented_chunk)
-        generated_question = model.run(user_prompt=step2_msg, system_prompt=system_message_2)
+        # Format prompts with num_answers parameter
+        system_msg_2 = system_message_2.format(num_answers=num_answers)
+        step2_msg = user_message_2.format(augmented_chunk=augmented_chunk, num_answers=num_answers)
+        generated_question = model.run(user_prompt=step2_msg, system_prompt=system_msg_2)
         if config.shutdown_event.is_set():  # Check after model.run
             return (filename, linenum, chunknum, None, False)
+        # find the correct answer with the '(*)' marker
+        m = re.search(r'^\s*(\d+)\)[^\n]*\(\*\)', generated_question, flags=re.M)
+        correct_choice = m.group(1) if m else ""
     except Exception as e:
         if config.shutdown_event.is_set():
             config.logger.info("Shutdown in progress; suppressing error details.")
@@ -290,21 +297,47 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
     # Step 3: Verify and Score the MCQ.
     try:
         # Get prompts from settings if available, otherwise fall back to config
-        user_message_3 = settings.prompts.get("user_message_3") if hasattr(settings, "prompts") else config.user_message_3
-        system_message_3 = settings.prompts.get("system_message_3") if hasattr(settings, "prompts") else config.system_message_3
+        user_message_3 = settings.prompts.get("user_message_mcq_3") if hasattr(settings, "prompts") else config.user_message_3
+        system_message_3 = settings.prompts.get("system_message_mcq_3") if hasattr(settings, "prompts") else config.system_message_3
 
+        # Extract choices from the generated_question
+        # The question typically contains the full text with question followed by numbered choices
+        # We need to extract just the choices part
+        question_parts = generated_question.split("\n")
+        generated_choices = ""
+        collecting_choices = False
+        
+        for line in question_parts:
+            # Start collecting when we see a line starting with a number (like "1." or "1)")
+            if re.match(r'^\d+[\.\)]', line.strip()):
+                collecting_choices = True
+            
+            if collecting_choices:
+                generated_choices += line + "\n"
+        
+        # If we couldn't extract choices, use the whole question as a fallback
+        if not generated_choices:
+            generated_choices = generated_question
+            
         step3_msg = user_message_3.format(
             augmented_chunk=augmented_chunk,
-            generated_question=generated_question
+            generated_question=generated_question,
+            generated_choices=generated_choices
         )
         step3_output = model.run(user_prompt=step3_msg, system_prompt=system_message_3)
         if config.shutdown_event.is_set():  # Check after model.run
             return (filename, linenum, chunknum, None, False)
-        if step3_output is None:
-            raise ValueError("model.run() returned None for step3_output.")
-        step3_clean = step3_output.replace("```json", "").replace("```", "").strip()
-        parsed_json = robust_parse_json_output(step3_clean, model)
-        model_answer = str(parsed_json.get("answer", "")).strip()
+            
+        # Check for None or empty responses from the model
+        if step3_output is None or (isinstance(step3_output, str) and not step3_output.strip()):
+            config.logger.warning(f"Empty response from model for chunk {chunknum} in file {filename}. This may be due to a timeout or API error.")
+            # Default to a low score instead of raising an error
+            parsed_json = {"answer": "", "score": 0, "comment": "No response from model"}
+        else:
+            # Process normally when we have a response
+            step3_clean = step3_output.replace("```json", "").replace("```", "").strip()
+            parsed_json = robust_parse_json_output(step3_clean, model)
+        #model_answer = str(parsed_json.get("answer", "")).strip()
         model_score = parsed_json.get("score", 0)
         pbar_total.set_postfix_str(f"Score: {model_score}")
 
@@ -320,7 +353,7 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
                 "chunk": chunknum,
                 "model": model.model_name,
                 "question": generated_question,
-                "answer": model_answer,
+                "answer": correct_choice,
                 "text": augmented_chunk
             }
             chunk_success = True
@@ -369,7 +402,8 @@ def merge_mcq_output(out_file: str, new_qa_pairs: list) -> list:
 
 
 def process_directory(model, input_dir: str, output_dir: str = "output_files",
-                      use_progress_bar: bool = True, parallel_workers: int = 4, force: bool = False):
+                      use_progress_bar: bool = True, parallel_workers: int = 4, force: bool = False,
+                      num_answers: int = 4):
     """
     Process all JSON/JSONL files in input_dir by scheduling each text chunk
     as a separate task. If output files already exist and force is False,
@@ -461,7 +495,8 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
                     futures.append(executor.submit(process_chunk, model, filename, rec_path,
                                                     linenum, chunknum, chunk,
                                                     pbar_total, pbar_success,
-                                                    shared_counters, counter_lock))
+                                                    shared_counters, counter_lock,
+                                                    num_answers))
                     # Check immediately after submitting if shutdown was triggered
                     if config.shutdown_event.is_set():
                         config.logger.info("Shutdown triggered: stopping further task submission.")

@@ -1,45 +1,108 @@
-# CELS Server Configurations for robin_testing_v2.py
-# Last updated: 2025-04-20
-servers:
-  # optillm on top of scout
-  - server: "localhost"
-    shortname: "CePO"
-    openai_api_key: "no_key"
-    openai_api_base: "http://127.0.0.1:8898/v1"
-    openai_model: "llama-4-scout-17b-16e-instruct"
-  # Scout model on rbh101 server
-  - server: "rbh101.cels.anl.gov"
-    shortname: "scout"
-    openai_api_key: "CELS"
-    openai_api_base: "http://66.55.67.65:80/v1"
-    openai_model: "scout"
-  # Qwen model on hcdgx2 server
-  - server: "hcdgx2.cels.anl.gov"
-    shortname: "qwen"
-    openai_api_key: "CELS"
-    openai_api_base: "http://103.101.203.226:80/v1"
-    openai_model: "Qwen"
-  # Llama 3.3 70B model on rbdgx2 server
-  - server: "rbdgx2.cels.anl.gov"
-    shortname: "llama"
-    openai_api_key: "CELS"
-    openai_api_base: "http://195.88.24.64:80/v1"
-    openai_model: "meta-llama/Llama-3.3-70B-Instruct"
-  # OpenAI GPT-4.1
-  - server: "api.openai.com"
-    shortname: "gpt41"
-    openai_api_key: "${OPENAI_API_KEY}"
-    openai_api_base: "https://api.openai.com/v1"
-    openai_model: "gpt-4.1"
-  # O3-mini-high model
-  - server: "api.openai.com"
-    shortname: "o3"
-    openai_api_key: "${OPENAI_API_KEY}"
-    openai_api_base: "https://api.openai.com/v1"
-    openai_model: "o3"
-  # O4-mini
-  - server: "api.openai.com"
-    shortname: "o4mini"
-    openai_api_key: "${OPENAI_API_KEY}"
-    openai_api_base: "https://api.openai.com/v1"
-    openai_model: "o4-mini"
+# Endpoint catalog for MCQ and SFT workflow
+# Contains endpoint configurations and model information
+# Credentials are referenced by key and stored in secrets.yml
+
+endpoints:
+    # Local endpoints
+    cepo:
+        shortname: "CePO"
+        provider: local
+        base_url: "http://127.0.0.1:8898/v1"
+        model: "llama-4-scout-17b-16e-instruct"
+        cred_key: cepo_key
+
+    scout:
+        shortname: "scout"
+        provider: local
+        base_url: "http://66.55.67.65:80/v1"
+        model: "scout"
+        cred_key: cels_key
+
+    qwen:
+        shortname: "qwen"
+        provider: local
+        base_url: "http://103.101.203.226:80/v1"
+        model: "Qwen"
+        cred_key: cels_key
+
+    llama:
+        shortname: "llama"
+        provider: local
+        base_url: "http://195.88.24.64:80/v1"
+        model: "meta-llama/Llama-3.3-70B-Instruct"
+        cred_key: cels_key
+
+    # OpenAI endpoints
+    gpt41:
+        shortname: "gpt41"
+        provider: openai
+        base_url: "https://api.openai.com/v1"
+        model: "gpt-4.1"
+        cred_key: openai_access_token
+
+    o3:
+        shortname: "o3"
+        provider: openai
+        base_url: "https://api.openai.com/v1"
+        model: "o3"
+        cred_key: openai_access_token
+
+    o4mini:
+        shortname: "o4mini"
+        provider: openai
+        base_url: "https://api.openai.com/v1"
+        model: "gpt-4o-mini"
+        cred_key: openai_access_token
+
+    gpt41nano:
+        shortname: "gpt41nano"
+        provider: openai
+        base_url: "https://api.openai.com/v1"
+        model: "gpt-4.1-nano"
+        cred_key: openai_access_token
+
+    gpt4o:
+        shortname: "gpt4o"
+        provider: openai
+        base_url: "https://api.openai.com/v1"
+        model: "gpt-4o"
+        cred_key: openai_access_token
+
+    # Argo endpoints
+    argo:
+        shortname: "argo"
+        provider: argo
+        base_url: "https://apps.inside.anl.gov/argoapi/api/v1/resource/chat"
+        model: "llama2-70b"
+        cred_key: argo_token
+
+    argo_dev:
+        shortname: "argo_dev"
+        provider: argo_dev
+        base_url: "https://apps-dev.inside.anl.gov/argoapi/api/v1/resource/chat"
+        model: "llama2-70b"
+        cred_key: argo_dev_token
+
+    # ALCF endpoint
+    alcf:
+        shortname: "alcf"
+        provider: alcf
+        base_url: "https://data-portal-dev.cels.anl.gov/resource_server/sophia/vllm/v1"
+        model: "llama2-70b"  # Default model, can be overridden
+        cred_key: alcf_token
+
+    # Test endpoint for development
+    test:
+        shortname: "test"
+        provider: test
+        base_url: "http://localhost"
+        model: "test-model"
+        cred_key: test_key
+
+    # Hugging Face endpoint
+    hf:
+        shortname: "hf"
+        provider: hf
+        base_url: "https://huggingface.co"
+        model: "meta-llama/Llama-2-7b-hf"  # Example model
+        cred_key: huggingface_token
