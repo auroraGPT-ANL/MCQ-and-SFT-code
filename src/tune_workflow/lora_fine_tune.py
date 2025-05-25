@@ -18,18 +18,24 @@ from huggingface_hub import login
 
 def main():
     # -------------------------------------------------------------------------
-    # 1. Parse command-line arguments for dataset file and output directory
+    # Parse command-line arguments for dataset file and output directory
     # -------------------------------------------------------------------------
     parser = argparse.ArgumentParser( description="Train a LoRA adapter on a given JSON dataset, then merge and save.")
     parser.add_argument( '-d', "--dataset_file", type=str, required=True, help="Path to the JSON file containing the dataset (e.g. text.json).")
     parser.add_argument( '-o', "--output_dir", type=str, required=True, help="Output directory for saving the final model.")
+    parser.add_argument( '-v', "--verbose", action="store_true", help="Verbose mode")
+    parser.add_argument( '-m', '--model', default='meta-llama/Llama-3.1-8B-Instruct', help='Name of model to fine tune') # Base model from HF
+    parser.add_argument( '-u', '--username', default='', help='User name to push to HF') 
     args = parser.parse_args()
 
     dataset_file = args.dataset_file
     output_dir   = args.output_dir
+    verbose      = args.verbose
+    model_name   = args.model
+    username     = args.username
 
     # -------------------------------------------------------------------------
-    # 2. (Optional) Log in to Hugging Face
+    # (Optional) Log in to Hugging Face
     # -------------------------------------------------------------------------
     # If you intend to push to HF Hub, ensure hf_access_token.txt is accessible
     with open("hf_access_token.txt", "r") as file:
@@ -39,16 +45,17 @@ def main():
     max_seq_length = 2048  # e.g. for models that support RoPE scaling
 
     # -------------------------------------------------------------------------
-    # 3. Load the dataset
+    # Load the dataset
     # -------------------------------------------------------------------------
+    if verbose: print(f'Step 1: Load dataset {dataset_file}')
     dataset = load_dataset("json", data_files=dataset_file, split="train")
     num_rows = dataset.num_rows
-    print(f"Number of rows: {num_rows}")
+    if verbose: print(f"Number of rows: {num_rows}")
 
     num_steps = num_rows % 4  # Just an example of how to define steps
 
     # -------------------------------------------------------------------------
-    # 4. Configure 4-bit quantization
+    # Configure 4-bit quantization
     # -------------------------------------------------------------------------
     config = BitsAndBytesConfig(
         load_in_4bit=True,
@@ -58,9 +65,9 @@ def main():
     )
 
     # -------------------------------------------------------------------------
-    # 5. Define the model and tokenizer
+    # Define the model and tokenizer
     # -------------------------------------------------------------------------
-    model_name = "meta-llama/Llama-3.1-8B-Instruct"   # Base model from HF
+    if verbose: print(f'Step 2: Load model {model_name}')  
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     # Load base model with quantization
@@ -79,8 +86,9 @@ def main():
     base_model = prepare_model_for_kbit_training(base_model)
 
     # -------------------------------------------------------------------------
-    # 6. Create the PEFT LoRA configuration and wrap the base model
+    # Create the PEFT LoRA configuration and wrap the base model
     # -------------------------------------------------------------------------
+    if verbose: print(f'Step 3: Wrap base model')  
     lora_config = LoraConfig(
         r=16,
         target_modules=["q_proj", "v_proj"],
@@ -92,8 +100,9 @@ def main():
     peft_model = get_peft_model(base_model, lora_config)
 
     # -------------------------------------------------------------------------
-    # 7. Create and run the SFTTrainer
+    # Create and run the SFTTrainer
     # -------------------------------------------------------------------------
+    if verbose: print(f'Step 4: Create and run SFTTrainer')  
     trainer = SFTTrainer(
         model=peft_model,
         train_dataset=dataset,
@@ -114,14 +123,16 @@ def main():
     trainer.train()
 
     # -------------------------------------------------------------------------
-    # 8. Save the LoRA adapter + tokenizer to the user-specified output directory
+    # Save the LoRA adapter + tokenizer to the user-specified output directory
     # -------------------------------------------------------------------------
+    if verbose: print(f'Step 5: Save LoRA adapter and tokenizer to {output_dir}')  
     peft_model.save_pretrained(output_dir, save_adapter=True, save_config=True)
     tokenizer.save_pretrained(output_dir)
 
     # -------------------------------------------------------------------------
-    # 9. Merge LoRA weights with the base model and save the final merged model
+    # Merge LoRA weights with the base model and save the final merged model
     # -------------------------------------------------------------------------
+    if verbose: print(f'Step 6: Merge LoRA weights with base model and save final merged model')  
     model_to_merge = peft_model.from_pretrained(
         AutoModelForCausalLM.from_pretrained(model_name).to("cuda"),
         output_dir
@@ -132,11 +143,12 @@ def main():
     tokenizer.save_pretrained(output_dir)
 
     # -------------------------------------------------------------------------
-    # 10. (Optional) Push merged model and tokenizer to Hugging Face Hub
+    # Push merged model and tokenizer to Hugging Face Hub
     # -------------------------------------------------------------------------
-    # Adjust the repo name "ianfoster/..." or remove if not pushing to Hub
-    merged_model.push_to_hub("ianfoster/" + os.path.basename(output_dir))
-    tokenizer.push_to_hub("ianfoster/" + os.path.basename(output_dir))
+    if username != '':
+        if verbose: print(f'Step 7: Push merged model and tokenizer to Hugging Face Hub with username {username}')  
+        merged_model.push_to_hub(f'{username}/{os.path.basename(output_dir)}')
+        tokenizer.push_to_hub(f'{username}/{os.path.basename(output_dir)}')
 
 
 if __name__ == "__main__":
