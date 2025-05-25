@@ -13,8 +13,17 @@ import logging
 import concurrent.futures
 from typing import Optional, List, Tuple
 from tqdm import tqdm
-
 from common import config  # Keep for backward compatibility
+import logging
+import sys
+
+# -----------------------------------
+# Logging: default WARNING unless -v/--verbose
+level = logging.DEBUG if "-v" in sys.argv or "--verbose" in sys.argv else logging.WARNING
+logging.basicConfig(format="%(levelname)s:%(name)s: %(message)s", level=level)
+logging.getLogger("httpx").setLevel(level)
+# -----------------------------------
+
 from common.loader import load_settings
 from common.model_access import Model
 

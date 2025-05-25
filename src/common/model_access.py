@@ -34,7 +34,14 @@ from test.test_model import TestModel  # local stub for offline testing
 # ---------------------------------------------------------------------------
 # Settings initialization
 # ---------------------------------------------------------------------------
-settings = load_settings()
+from pydantic import ValidationError
+try:
+    settings = load_settings()
+except ValidationError as e:
+    first = e.errors()[0]
+    print(f"❌  {first['msg']}")
+    sys.exit(1)
+
 
 # ---------------------------------------------------------------------------
 # Local aliases for readability

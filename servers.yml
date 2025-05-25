@@ -38,37 +38,37 @@ endpoints:
         provider: openai
         base_url: "https://api.openai.com/v1"
         model: "gpt-4.1"
-        cred_key: openai_access_token
+        cred_key: openai_api_key
 
     o3:
         shortname: "o3"
         provider: openai
         base_url: "https://api.openai.com/v1"
         model: "o3"
-        cred_key: openai_access_token
+        cred_key: openai_api_key
 
     o4mini:
         shortname: "o4mini"
         provider: openai
         base_url: "https://api.openai.com/v1"
         model: "gpt-4o-mini"
-        cred_key: openai_access_token
+        cred_key: openai_api_key
 
     gpt41nano:
         shortname: "gpt41nano"
         provider: openai
         base_url: "https://api.openai.com/v1"
         model: "gpt-4.1-nano"
-        cred_key: openai_access_token
+        cred_key: openai_api_key
 
     gpt4o:
         shortname: "gpt4o"
         provider: openai
         base_url: "https://api.openai.com/v1"
         model: "gpt-4o"
-        cred_key: openai_access_token
+        cred_key: openai_api_key
 
-    # Argo endpoints
+    # Argo endpoints - to do - rename cred_key to username
     argo:
         shortname: "argo"
         provider: argo
