@@ -106,7 +106,7 @@ def main():
     trainer = SFTTrainer(
         model=base_model,
         train_dataset=dataset,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         args=TrainingArguments(
             per_device_train_batch_size=2,
             gradient_accumulation_steps=4,
@@ -120,7 +120,7 @@ def main():
         ),
     )
 
-    trainer.train(resume_from_checkpoint=True)
+    trainer.train(resume_from_checkpoint=False)
 
     # If you want to switch sides, for instance:
     # tokenizer.padding_side = "left"
