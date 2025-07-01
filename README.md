@@ -123,7 +123,22 @@ EOF
 
 **Verify Configuration:**
 ```bash
-python test_settings_basic.py
+python -c "
+try:
+    from common.loader import load_settings
+    settings = load_settings()
+    print('✅ Configuration system loaded successfully')
+    print('Available endpoints:', list(settings.endpoints.keys())[:5])
+    if hasattr(settings, 'workflow'):
+        print('Configured workflow models:', settings.workflow.contestants)
+        print('✅ Setup looks good! You can proceed to run the workflow.')
+    else:
+        print('❌ No workflow configuration found')
+        print('Create config.local.yml as shown in the README')
+except Exception as e:
+    print(f'❌ Configuration error: {e}')
+    print('Check that you have created config.local.yml and secrets.yml')
+"
 ```
 
 **Add Sample Papers:**
