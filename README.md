@@ -1,24 +1,21 @@
 # Code for Creating Scientific Training Data from Papers
 
 ## Overview
-This repository provides Python programs for creating training data to fine-tune models using
-scientific papers.  There are two workflows implemented (or being implemented) here.  The first, 
-**Multiple Choice Question (MCQ) Workflow**, does the following:
-1.  Converts PDF-format papers into JSON
-2.  Uses an AI model to generate Multiple Choice Questions (MCQs) for each paper.  Each paper is split into n-token *chunks*, and the model creates an MCQ for each chunk.
-3.  Uses one or more models to answer the MCQs
-4.  All models used score answers from all other models.
 
-A second workflow, **New Knowledge Nugget (NKN) Workflow**, still under construction, will 
-1.  Convert PDF-format papers into JSON
-2.  Use an AI model to extract Knowlege Nuggets from each paper.  Each paper is split into n-token *chunks*, and the will extract knowledge nuggets from each.
-3.  Test each nugget using a model to be fine-tuned, eliminating nuggets that are already known to the model. This will create a set of *New* Knowledge Nuggets (NKNs) for fine-tuning the target model.
+This repository provides Python programs for creating training data to fine-tune models using scientific papers. There are two workflows implemented (or being implemented) here:
 
-The current, stable mcq\_workflow system operates from the command line, where each component of the workflow can be run as a stand-alone tool or as part of a shell script, 'legacy/scripts/run\_mcq\_workflow.sh'. This script implements the workflow as illustrated in 
-[this flowchart](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/CeC/MCQ-Workflow.png). If only interested in this version, and not tinkering, you may prefer to download the
-[Stable-Snapshot: Version-1](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/releases/tag/Stable-V1)
-release (tagged in this repo as
-[Stable-V1](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/tree/Stable-V1)).
+**Multiple Choice Question (MCQ) Workflow** does the following:
+1. Converts PDF-format papers into JSON
+2. Uses an AI model to generate Multiple Choice Questions (MCQs) for each paper. Each paper is split into n-token *chunks*, and the model creates an MCQ for each chunk.
+3. Uses one or more models to answer the MCQs
+4. All models used score answers from all other models.
+
+**New Knowledge Nugget (NKN) Workflow** (under construction) will:
+1. Convert PDF-format papers into JSON
+2. Use an AI model to extract Knowledge Nuggets from each paper. Each paper is split into n-token *chunks*, and the will extract knowledge nuggets from each.
+3. Test each nugget using a model to be fine-tuned, eliminating nuggets that are already known to the model. This will create a set of *New* Knowledge Nuggets (NKNs) for fine-tuning the target model.
+
+The current system operates from the command line, where each component of the workflow can be run as a stand-alone tool or as part of the main workflow orchestrator.
 
 ### MCQ Workflow Overview
 
@@ -28,9 +25,6 @@ This pipeline converts scientific papers in PDF format into JSON and then uses A
 * Score the generated answers
 
 **Step-by-Step Workflow:**
-[View Example Workflow Flowchart](https://github.com/auroraGPT-ANL/MCQ-and-SFT-code/blob/CeC/MCQ-Workflow.png)
-(This chart is a simplified instance of the workflow)
-
 1. Convert PDFs to JSON representations
 2. Generate MCQs from JSON files
 3. Combine MCQ JSON files
@@ -44,154 +38,312 @@ This pipeline converts scientific papers in PDF format into JSON and then uses A
 The repository is organized as follows:
 
 * *src/common* - tools common to both the MCQ and Nugget workflows, including model access, configuration, etc., 
-* *src/mcq\_workflow* - tools specific to generating, answering, and scoring MCQs, 
-* *src/nugget\_workflow* - tools specific to extracting knowledge nuggets and screening for those not already know by a target model,
-* *src/tune\_workflow* - tools to take MCQs (and eventually NKNs) to fine-tune a model. (also under construction, thus not yet included in either workflow)
+* *src/mcq_workflow* - tools specific to generating, answering, and scoring MCQs, 
+* *src/nugget_workflow* - tools specific to extracting knowledge nuggets and screening for those not already know by a target model,
+* *src/tune_workflow* - tools to take MCQs (and eventually NKNs) to fine-tune a model. (also under construction, thus not yet included in either workflow)
 * *src/test* - test routines including a stub model for testing workflows quickly without model delays (including offline testing), and
-* *legacy/scripts* shell script to execute workflow (replaced with a python script in *src/mcq\_workflow*).
+* *legacy/scripts* shell script to execute workflow (replaced with a python script in *src/mcq_workflow*).
 
 **Contact:** Please email {foster|stevens|catlett}@anl.gov if you see things that are unclear or missing.
 
 ---
-### Clone the Repo and Get Set up
 
-1. **Clone the Repository:**
-```bash
-git clone git@github.com:auroraGPT-ANL/MCQ-and-SFT-code.git
-cd MCQ-and-SFT-code
-```
-*Alternatively*... if you are not using SSH access to Github, you can:
+## Quick Start Guide
+
+### 1. Clone and Setup Environment
+
+**Clone the Repository:**
 ```bash
 git clone https://github.com/auroraGPT-ANL/MCQ-and-SFT-code.git
 cd MCQ-and-SFT-code
 ```
 
-2. **Prepare Working Directories:**
-```bash
-mkdir _PAPERS _JSON _MCQ _RESULTS
-```
-
-3. **Set Up Conda Environment:**
-
-Option 1: Update your existing Conda environment
-```bash
-conda env update --name YOUR_CONDA_ENV --file environment.yml
-```
-
-Option 2: Create new environment
+**Create Conda Environment:**
 ```bash
 conda env create -f environment.yml
 conda activate augpt_env
 ```
 
-4. Add the (full, absolute paths) to the src directories to your PYTHONPATH:
+**Set Python Path (Required):**
 ```bash
-export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/MCQ-and-SFT-code/src${PYTHONPATH:+:$PYTHONPATH}"
-```
-To avoid having to do this every time you activate the conda env, add this to your *~/.zshrc* or 
-*~/.bashrc*::
-```bash
-# set PYTHONPATH for MCQ pipeline at MCQ-and-SFT-code
-export PYTHONPATH="$HOME/MCQ-and-SFT-code:$HOME/YOUR_PATH/MCQ-and-SFT-code/src${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$PWD:$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
 ```
 
-Note- Make sure to update **YOUR**\_**PATH**.
-
-5. **Populate \_PAPERS:** Place PDF-formatted input materials (e.g., scientific papers) into \_PAPERS. (Note 
-this workflow is only processing text)
-
-6. **Set up configuration:** Edit *config.yml* to specify at least two and up to four
-models you wish to use.  (see **Configuration** notes below)
-
-
-### Configuration-file guide
-
-| File | Tracked? | Purpose |
-|------|----------|---------|
-| `config.yml` | ✓ | Stable defaults: prompts, directory names, CLI defaults. |
-| `servers.yml` | ✓ | Shared **endpoint catalogue** — one entry per inference host. |
-| `config.local.yml` | ✗ | **Your run-time choices**: extraction / contestant / target models, per-user tweaks. |
-| `secrets.yml` | ✗ | Credentials: API keys, usernames, tokens referenced by `servers.yml`. |
-
-**Override precedence (highest → lowest)**  
-`env vars` ▸ `config.local.yml` ▸ `servers.yml` ▸ `config.yml`
-
-### First end-to-end test
-
-1. Create your working dirs
-
+**Create Working Directories:**
 ```bash
 mkdir -p _PAPERS _JSON _MCQ _RESULTS
 ```
 
-2. Run the entire workflow with 4 parallel workers with the --verbose option.
+### 2. Configuration Setup
 
-This (-v --verbose) option exposes details of anything that might go wrong.
-Once you are running smoothly, it's prettier without the --verbose option.
+The system uses 4 configuration files with this precedence (highest → lowest):  
+`env vars` ▸ `config.local.yml` ▸ `servers.yml` ▸ `config.yml`
 
+| File | Tracked? | Purpose | Action Needed |
+|------|----------|---------|---------------|
+| `config.yml` | ✓ | Stable defaults | Already exists |
+| `servers.yml` | ✓ | Endpoint catalog | Already exists |
+| `config.local.yml` | ✗ | **Your models & settings** | **You must create** |
+| `secrets.yml` | ✗ | **Your API keys** | **You must create** |
+
+#### Create Your Local Configuration
+
+**Step 2a: Create `config.local.yml`**
+```bash
+# Create your local configuration file
+cat > config.local.yml << 'EOF'
+# Your model choices for this run
+workflow:
+  extraction: openai:gpt-4o-mini     # Model for generating MCQs
+  contestants: [openai:gpt-4o-mini]  # Models for answering MCQs
+  target: openai:gpt-4o-mini         # Target model (optional)
+
+# Optional: Override defaults
+timeout: 60
+default_temperature: 0.7
+EOF
+```
+
+**Step 2b: Create `secrets.yml`**
+```bash
+# Create your secrets file (never commit this!)
+cat > secrets.yml << 'EOF'
+# Add your API credentials here
+openai_api_key: "sk-your-openai-key-here"
+
+# Uncomment and add other credentials as needed:
+# argo_username: "your-argo-username"
+# alcf_token: "your-alcf-token"
+EOF
+```
+
+⚠️ **Important**: Replace `"sk-your-openai-key-here"` with your actual OpenAI API key.
+
+### 3. Test Your Setup
+
+**Verify Configuration:**
+```bash
+python test_settings_basic.py
+```
+
+**Add Sample Papers:**
+```bash
+# Place PDF files in _PAPERS directory
+cp /path/to/your/papers/*.pdf _PAPERS/
+```
+
+**Run Quick Test:**
+```bash
+# Test the complete workflow with minimal settings
+python -m mcq_workflow.run_workflow -p 2 -v
+```
+
+### 4. Understanding the Configuration System
+
+#### Available Model Endpoints
+
+Check `servers.yml` to see available endpoints. Common patterns:
+
+- **OpenAI**: `openai:gpt-4o-mini`, `openai:gpt-4o`
+- **Local servers**: Use shortnames like `scout`, `qwen`  
+- **ALCF**: `alcf:meta-llama/Meta-Llama-3-70B-Instruct`
+- **Test models**: `test:all` (for offline development)
+
+#### Model Configuration Examples
+
+**Simple OpenAI setup:**
+```yaml
+workflow:
+  extraction: openai:gpt-4o-mini
+  contestants: [openai:gpt-4o-mini]
+```
+
+**Multiple models:**
+```yaml
+workflow:
+  extraction: openai:gpt-4o
+  contestants: [openai:gpt-4o, openai:gpt-4o-mini, scout]
+  target: openai:gpt-4o
+```
+
+**Offline testing:**
+```yaml
+workflow:
+  extraction: test:all
+  contestants: [test:all]
+```
+
+#### Adding New Endpoints
+
+1. **Add endpoint to `servers.yml`:**
+```yaml
+my_endpoint:
+  shortname: my_model
+  provider: openai  # or: argo, alcf, local, hf
+  base_url: https://api.example.com/v1
+  model: my-model-name
+  cred_key: my_api_key
+```
+
+2. **Add credential to `secrets.yml`:**
+```yaml
+my_api_key: "your-secret-key"
+```
+
+3. **Reference in `config.local.yml`:**
+```yaml
+workflow:
+  extraction: my_model  # or: openai:my-model-name
+```
+
+### 5. Troubleshooting Setup
+
+**Configuration not working?**
+```bash
+# Check file exists and format
+ls -la config.local.yml secrets.yml
+python -c "import yaml; print(yaml.safe_load(open('config.local.yml')))"
+```
+
+**Import errors?**
+```bash
+# Ensure PYTHONPATH is set
+echo $PYTHONPATH
+conda activate augpt_env
+```
+
+**API errors?**
+```bash
+# Test credentials
+python -c "
+from common.loader import load_settings
+settings = load_settings()
+print('Available endpoints:', list(settings.endpoints.keys()))
+print('Configured models:', settings.workflow.contestants)
+"
+```
+
+---
+
+## Detailed Workflow Commands
+
+### Main Workflow Execution
+
+**Full MCQ workflow with 4 parallel workers:**
 ```bash
 python -m mcq_workflow.run_workflow -p 4 -v
 ```
 
-The script loads models, generates MCQs, answers, and scores.
+**Start from specific step (1-5):**
+```bash
+python -m mcq_workflow.run_workflow --step 3 -p 4
+```
+
+**Process subset of MCQs:**
+```bash
+python -m mcq_workflow.run_workflow -n 50 -p 4
+```
+
+### Individual Pipeline Components
+
+**Convert PDFs to JSON:**
+```bash
+python -m common.simple_parse -i _PAPERS -o _JSON
+```
+
+**Generate MCQs:**
+```bash
+python -m mcq_workflow.generate_mcqs -p 4 -v
+python -m mcq_workflow.generate_mcqs -m openai:gpt-4o -a 5  # 5-choice MCQs
+```
+
+**Generate answers:**
+```bash
+python -m mcq_workflow.generate_answers -i MCQ-combined.json -m openai:gpt-4o -p 4
+```
+
+**Score answers:**
+```bash
+python -m mcq_workflow.score_answers -a openai:gpt-4o -b argo:mistral-7b -p 4
+```
+
+**Combine MCQ files:**
+```bash
+python -m common.combine_json_files -o MCQ-combined.json
+```
+
+### Testing Commands
+
+**Integration test with specific PDF:**
+```bash
+./src/test/test_workflow.sh -i path/to/paper.pdf -v
+```
+
+**Test model verification (offline testing):**
+```bash
+python -m test.test_model_verification -v
+```
+
+**Legacy workflow test:**
+```bash
+./legacy/scripts/run_mcq_workflow.sh -p 2 -v
+```
+
+### Utility Commands
+
+**List configured models:**
+```bash
+python -m common.list_models -p 4
+```
+
+**Review processing status:**
+```bash
+python -m mcq_workflow.review_status -o _RESULTS
+```
+
+**Check ALCF service status:**
+```bash
+python -m common.check_alcf_service_status
+```
+
+**Extract Q&A pairs from results:**
+```bash
+python -m mcq_workflow.extract_qa -i input.json -o output.json
+```
+
+**Select random MCQ subset:**
+```bash
+python -m common.select_mcqs_at_random -i MCQ-combined.json -o MCQ-subset.json -n 100
+```
 
 ---
 
-## Configuration reference 
+## Authentication Setup
 
-`config.yml`
-```yaml
-directories:
-  papers: _PAPERS
-  json_dir: _JSON
-  mcq: _MCQ
-  results: _RESULTS
-quality:
-  chunkSize: 1000
-  defaultThreads: 4
-prompts:
-  mcq_system: |
-    You are a helpful assistant…
+### ALCF Inference Service
+```bash
+python -m common.inference_auth_token authenticate
+python -m common.inference_auth_token get_access_token  # Check current token
 ```
 
-`config.local.yml` (example)
+### OpenAI
+Add to `secrets.yml`:
 ```yaml
-workflow:
-  extraction: openai:gpt-4o
-  contestants: [openai:gpt-4o, argo:mistral-7b]
-  target: openai:gpt-4o      # optional for future fine-tuning
-timeout: 60
-default_temperature: 0.7
+openai_api_key: "sk-your-key-here"
 ```
 
-`servers.yml`
+### Argo
+Add to `secrets.yml`:
 ```yaml
-oak:              # shortname users reference in CLI
-  shortname: oak
-  provider: openai
-  base_url: https://api.openai.com/v1
-  model: gpt-4o
-  cred_key: openai_api_key
-argo_dev:
-  shortname: argo
-  provider: argo
-  base_url: https://argo-dev.alcf.anl.gov/v1
-  model: mistralai/Mistral-7B-Instruct-v0.3
-  cred_key: argo_token
-```
-
-`secrets.yml`
-```yaml
-openai_api_key:   "sk-…"
-argo_token:       "Bearer abcdef…"
+argo_username: "your-argo-username"
 ```
 
 ---
 
-## FAQ (new)
+## FAQ
 
 * **Q: I changed models in `config.local.yml` but the run still calls the old ones.**  
-  A: Make sure you didn’t also set `AUGPT_WORKFLOW__…` environment variables; env vars override YAML.
+  A: Make sure you didn't also set `AUGPT_WORKFLOW__…` environment variables; env vars override YAML.
 
 * **Q: How do I add a brand-new endpoint?**  
   1. Add a block in `servers.yml` with `provider`, `base_url`, `model`, `cred_key`.  
@@ -203,10 +355,4 @@ argo_token:       "Bearer abcdef…"
 
 ---
 
-## More Detailed Overview
-
-This overview may have some errors as the update in this branch is a WIP.
-
-
-*Last updated: 2025-05-25*
-
+*Last updated: 2025-07-01*
