@@ -13,6 +13,7 @@ from peft import get_peft_model, LoraConfig, TaskType, prepare_model_for_kbit_tr
 from datasets import load_dataset
 import json
 from huggingface_hub import login
+import numpy as np
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train a model using SFTTrainer on a JSON dataset.")
@@ -41,7 +42,11 @@ def main():
             hf_access_token = file.read().strip()
         login(hf_access_token)
 
-    max_seq_length = 2048  # For example, supports RoPE scaling internally
+    max_seq_length = 5120  # For example, supports RoPE scaling internally
+
+    # Training configuration
+    per_device_batch_size = 4
+    gradient_accumulation_steps = 8
 
     # -------------------------------------------------------------------------
     # 3. Load the dataset from the user-specified file
@@ -51,25 +56,42 @@ def main():
     num_rows = dataset.num_rows
     print(f"Number of rows: {num_rows}")
 
-    num_steps = num_rows  # Modify as desired
+    # Calculate steps based on effective batch size
+    num_gpus = torch.cuda.device_count()
+    effective_batch_size = per_device_batch_size * gradient_accumulation_steps * num_gpus
+    num_steps = num_rows // effective_batch_size
+    print(f"Number of GPUs: {num_gpus}")
+    print(f"Effective batch size: {effective_batch_size}")
     print(f"Number of steps: {num_steps}")
 
     # -------------------------------------------------------------------------
     # 4. (Optional) Configure 4-bit quantization
     #    (Currently commented out; uncomment if needed)
     # -------------------------------------------------------------------------
-    config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_compute_dtype=torch.bfloat16,
-    )
+    if 0: 
+        config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+        )
+    else:
+        config = None
 
     # -------------------------------------------------------------------------
     # 5. Define the model and tokenizer
     # -------------------------------------------------------------------------
-    model_name = "meta-llama/Llama-3.1-8B-Instruct"
+    #model_name = "meta-llama/Llama-3.1-8B-Instruct"
+    #model_name = "Qwen/Qwen2.5-7B-Instruct"
+    model_name = "argonne-private/AuroraGPT-IT-v4-0125"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+    # Quick check of tokenization lengths
+    print("Analyzing token lengths...")
+    sample = dataset.select(range(100))
+    tokenized = tokenizer(sample['text'], truncation=False, return_length=True)
+    lengths = [length for length in tokenized['length']]
+    print(f"Max tokens: {max(lengths)}, 95th percentile: {np.percentile(lengths, 95):.0f}")
 
     # If you need quantization + device_map:
     # base_model = AutoModelForCausalLM.from_pretrained(
@@ -89,11 +111,7 @@ def main():
     print(f"Pad Token id: {tokenizer.pad_token_id} and Pad Token: {tokenizer.pad_token}")
     print(f"EOS Token id: {tokenizer.eos_token_id} and EOS Token: {tokenizer.eos_token}")
 
-    tokenizer.add_special_tokens({"pad_token": "<|end_of_text|>"})
-
-    print(f"Pad Token id: {tokenizer.pad_token_id} and Pad Token: {tokenizer.pad_token}")
-    print(f"EOS Token id: {tokenizer.eos_token_id} and EOS Token: {tokenizer.eos_token}")
-
+    tokenizer.pad_token = tokenizer.eos_token
     base_model.config.pad_token_id = tokenizer.eos_token_id
     tokenizer.padding_side = "right"
 
@@ -106,10 +124,10 @@ def main():
     trainer = SFTTrainer(
         model=base_model,
         train_dataset=dataset,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         args=TrainingArguments(
-            per_device_train_batch_size=2,
-            gradient_accumulation_steps=4,
+            per_device_train_batch_size=per_device_batch_size,
+            gradient_accumulation_steps=gradient_accumulation_steps,
             warmup_steps=10,
             max_steps=num_steps,
             bf16=True,
@@ -117,16 +135,13 @@ def main():
             output_dir="SFT-outputs",  # Intermediate checkpoints
             optim="adamw_8bit",
             seed=3407,
+            dataloader_num_workers=8,
+            dataloader_pin_memory=True,
         ),
     )
 
-    trainer.train(resume_from_checkpoint=True)
+    trainer.train(resume_from_checkpoint=False)
 
-    # If you want to switch sides, for instance:
-    # tokenizer.padding_side = "left"
-
-    print(f"Pad Token id: {tokenizer.pad_token_id} and Pad Token: {tokenizer.pad_token}")
-    print(f"EOS Token id: {tokenizer.eos_token_id} and EOS Token: {tokenizer.eos_token}")
 
     # -------------------------------------------------------------------------
     # 8. Save final model and tokenizer

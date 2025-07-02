@@ -88,6 +88,7 @@ dependencies:
    - wrapt==1.17.2
    - trl
    - peft
+   - bitsandbytes
    - accelerate==1.6.0
    - aiohappyeyeballs==2.6.1
    - aiohttp==3.11.18
@@ -143,7 +144,6 @@ dependencies:
    #
    ## commented out NVIDIA packages for MacOS version
    #
-   #- bitsandbytes
    #- nvidia-cublas-cu12==12.6.4.1
    #- nvidia-cuda-cupti-cu12==12.6.80
    #- nvidia-cuda-nvrtc-cu12==12.6.77
