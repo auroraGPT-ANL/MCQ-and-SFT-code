@@ -25,7 +25,7 @@ from transformers import (AutoModelForCausalLM, AutoTokenizer,
                           GenerationConfig)
 
 # Import settings system
-from common.loader import load_settings, Settings
+from settings import load_settings, Settings
 from common.exceptions import APITimeoutError
 from common.inference_auth_token import get_access_token
 from common.alcf_inference_utilities import get_names_of_alcf_chat_models

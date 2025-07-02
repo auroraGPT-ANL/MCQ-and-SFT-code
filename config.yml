@@ -20,26 +20,6 @@ http_client:
   pool_connections: 1      # connection pool size
   pool_maxsize: 1          # maximum pool size
 
-# Models 
-# temperature, base model, tokenizer applied to whatever model is specified
-# on the command line. Model name below is used if no model is specified on 
-# the comment line.
-
-model_type_endpoints:
-  openai:   "https://api.openai.com/v1"
-  argo:     "https://apps.inside.anl.gov/argoapi/api/v1/resource/chat"
-  argo_dev: "https://apps-dev.inside.anl.gov/argoapi/api/v1/resource/chat"
-
-# Models
-# Model configurations are now stored in config.local.yml (not tracked in git)
-# Create your own config.local.yml based on config.local.yml.example
-#
-# Previously defined here:
-# - model: default for score_answers.py
-# - model_b: for score_answers.py and knowledge testing (Temperature=0 recommended)
-# - model_c: additional model
-# - model_d: additional model
-
 # Argo API configuration
 argo:
   username_file: secrets.yml  # Path to secrets file containing Argo credentials

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This repository provides Python programs for creating training data to fine-tune models using scientific papers. There are two workflows implemented (or being implemented) here:
+This repository provides Python programs for creating training data to fine-tune models using scientific papers. The system uses a modern pydantic-based configuration system that supports both convenient shortnames (like `o4mini`) and traditional provider:model formats. There are two workflows implemented (or being implemented) here:
 
 **Multiple Choice Question (MCQ) Workflow** does the following:
 1. Converts PDF-format papers into JSON
@@ -64,9 +64,15 @@ conda env create -f environment.yml
 conda activate augpt_env
 ```
 
-**Set Python Path (Required):**
+**Set Python Path (Required - do this every time):**
 ```bash
 export PYTHONPATH="$PWD:$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
+echo "PYTHONPATH set to: $PYTHONPATH"
+```
+
+💡 **Tip**: Add this to your shell profile (`~/.bashrc` or `~/.zshrc`) to make it permanent:
+```bash
+echo 'export PYTHONPATH="$HOME/path/to/MCQ-and-SFT-code:$HOME/path/to/MCQ-and-SFT-code/src${PYTHONPATH:+:$PYTHONPATH}"' >> ~/.zshrc
 ```
 
 **Create Working Directories:**
@@ -92,11 +98,11 @@ The system uses 4 configuration files with this precedence (highest → lowest):
 ```bash
 # Create your local configuration file
 cat > config.local.yml << 'EOF'
-# Your model choices for this run
+# Your model choices for this run - use convenient shortnames!
 workflow:
-  extraction: openai:gpt-4o-mini     # Model for generating MCQs
-  contestants: [openai:gpt-4o-mini]  # Models for answering MCQs
-  target: openai:gpt-4o-mini         # Target model (optional)
+  extraction: o4mini                 # Model for generating MCQs
+  contestants: [o4mini, gpt41nano]   # Models for answering MCQs
+  target: o4mini                     # Target model (optional)
 
 # Optional: Override defaults
 timeout: 60
@@ -125,16 +131,12 @@ EOF
 ```bash
 python -c "
 try:
-    from common.loader import load_settings
+    from settings import load_settings
     settings = load_settings()
     print('✅ Configuration system loaded successfully')
-    print('Available endpoints:', list(settings.endpoints.keys())[:5])
-    if hasattr(settings, 'workflow'):
-        print('Configured workflow models:', settings.workflow.contestants)
-        print('✅ Setup looks good! You can proceed to run the workflow.')
-    else:
-        print('❌ No workflow configuration found')
-        print('Create config.local.yml as shown in the README')
+    print('Available endpoints:', len(settings.endpoints))
+    print('Configured workflow models:', settings.workflow.contestants)
+    print('✅ Setup looks good! You can proceed to run the workflow.')
 except Exception as e:
     print(f'❌ Configuration error: {e}')
     print('Check that you have created config.local.yml and secrets.yml')
@@ -154,6 +156,18 @@ python -m mcq_workflow.run_workflow -p 2 -v
 ```
 
 ### 4. Understanding the Configuration System
+
+#### New Pydantic Configuration Features 🎉
+
+Our modern configuration system provides several conveniences:
+
+- **🏷️ Shortnames**: Use `o4mini` instead of `openai:gpt-4o-mini`
+- **🔒 Automatic credential validation**: Only checks credentials for models you're actually using
+- **🛡️ Secure secrets**: Credentials are automatically wrapped in SecretStr for security
+- **📁 Hierarchical loading**: Environment variables > config.local.yml > servers.yml > config.yml
+- **✅ Smart validation**: Prevents common configuration errors
+
+Both shortnames and full `provider:model` formats work seamlessly.
 
 #### Available Model Endpoints
 
@@ -231,7 +245,7 @@ conda activate augpt_env
 ```bash
 # Test credentials
 python -c "
-from common.loader import load_settings
+from settings import load_settings
 settings = load_settings()
 print('Available endpoints:', list(settings.endpoints.keys()))
 print('Configured models:', settings.workflow.contestants)

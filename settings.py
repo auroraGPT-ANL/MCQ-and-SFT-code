@@ -55,14 +55,9 @@ class WorkflowModels(BaseModel):
         if len(set(v.contestants)) != len(v.contestants):
             raise ValueError("duplicate models in contestants list")
 
-        # Validate model format (provider:model)
-        for model in v.contestants:
-            if ':' not in model and model != "test:all":  # Special case for test:all default
-                raise ValueError(f"Invalid model format: {model}. Must be 'provider:model'")
-            if ':' in model:
-                provider = model.split(':')[0]
-                if provider not in [p.value for p in ModelProvider]:
-                    raise ValueError(f"Unknown provider: {provider}")
+        # Models can be either shortnames or provider:model format
+        # We'll validate the actual resolution during Settings validation
+        # when we have access to the endpoints catalog
         return v
 
 # ---------- directory configuration ----------
@@ -177,16 +172,48 @@ class Settings(BaseSettings):
         workflow = values.workflow
         endpoints = values.endpoints
 
-        for model in workflow.contestants:
-            if not model.startswith("test:"):  # Skip validation for test models
-                provider, _ = model.split(':')
-                if provider not in [e.provider.value for e in endpoints.values()]:
-                    raise ValueError(f"No endpoint configuration found for provider: {provider}")
+        # Basic validation will be done in the credential check below
+        # where we have the resolver function available
 
-        # Validate all required credentials exist
-        for endpoint in endpoints.values():
-            if endpoint.cred_key not in secrets and not endpoint.provider == "test":
-                raise ValueError(f"Missing credential for {endpoint.shortname}: {endpoint.cred_key}")
+        # Validate credentials for endpoints used in the current workflow
+        def resolve_model_to_provider(model_spec: str) -> str:
+            """Resolve a model specification to its provider.
+            
+            Args:
+                model_spec: Either 'shortname' or 'provider:model' format
+                
+            Returns:
+                Provider name
+            """
+            if ':' in model_spec:
+                # Already in provider:model format
+                return model_spec.split(':', 1)[0]
+            else:
+                # Try to find endpoint by shortname
+                for endpoint in endpoints.values():
+                    if endpoint.shortname == model_spec:
+                        return endpoint.provider.value
+                # If not found as shortname, treat as provider name
+                return model_spec
+        
+        active_models = workflow.contestants + [workflow.extraction, workflow.target]
+        active_providers = {resolve_model_to_provider(model) for model in active_models}
+        
+        for provider_name in active_providers:
+            # Skip test providers
+            if provider_name.startswith('test'):
+                continue
+                
+            # Find endpoint(s) that match this provider
+            matching_endpoints = [ep for ep in endpoints.values() if ep.provider.value == provider_name]
+            if matching_endpoints:
+                # Check that all matching endpoints have their credentials
+                for endpoint in matching_endpoints:
+                    if endpoint.cred_key not in secrets:
+                        raise ValueError(f"Missing credential for {endpoint.shortname}: {endpoint.cred_key}")
+            else:
+                # No endpoint found for this provider
+                raise ValueError(f"No endpoint configuration found for provider: {provider_name}")
 
         return values
 
@@ -251,15 +278,12 @@ def load_settings(extra_cfgs: Optional[List[Path]] = None) -> Settings:
     # Load user-specific configuration
     for p in LOCAL_CONFIG_FILES + (extra_cfgs or []):
         if p.exists():
-            _deep_merge(data, _safe_load_yaml(p))
-
-                for subkey, subvalue in value.items():
-                    secrets_flattened[f"{key}_{subkey}"] = subvalue
+            loaded_data = _safe_load_yaml(p)
+            if p.name == "secrets.yml" or p.name.endswith("secrets.yml"):
+                # Secrets files should contribute to the secrets section
+                data.setdefault("secrets", {}).update(loaded_data)
             else:
-                secrets_flattened[key] = value
-
-    # Update data with flattened secrets
-    data["secrets"] = secrets_flattened
+                _deep_merge(data, loaded_data)
 
     # Environment variables get highest precedence
     # Convert dot notation env vars to nested dict structure
