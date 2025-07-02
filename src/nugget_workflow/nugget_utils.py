@@ -16,14 +16,18 @@ import concurrent.futures
 from concurrent.futures import TimeoutError
 import threading
 
-from common import config
+from common import config  # Keep for backward compatibility
+from common.loader import load_settings
 from common.model_access import Model
 
+# Initialize settings
+settings = load_settings()
 
 ##############################################################################
 # Global constants
 ##############################################################################
-CHUNK_SIZE = config.chunkSize
+# Use settings with fallback to config for backward compatibility
+CHUNK_SIZE = settings.quality.chunkSize if hasattr(settings, 'quality') else config.chunkSize
 
 # Initialize spaCy model
 nlp = spacy.load("en_core_web_sm")
@@ -192,9 +196,13 @@ def extract_paper_metadata(chunk, model):
 
             # We still need to try to get the title and author for fallback purposes
             try:
+                # Get prompts from settings if available, otherwise fall back to config
+                metadata_system = settings.nugget_prompts.get('metadata_system') if hasattr(settings, 'nugget_prompts') else config.nugget_prompts['metadata_system']
+                metadata_user = settings.nugget_prompts.get('metadata_user') if hasattr(settings, 'nugget_prompts') else config.nugget_prompts['metadata_user']
+
                 response = model.run(
-                    system_prompt=config.nugget_prompts['metadata_system'],
-                    user_prompt=config.nugget_prompts['metadata_user'].format(chunk=chunk)
+                    system_prompt=metadata_system,
+                    user_prompt=metadata_user.format(chunk=chunk)
                 )
                 model_metadata = json.loads(response)
                 metadata["title"] = model_metadata.get("title")
@@ -227,9 +235,13 @@ def extract_paper_metadata(chunk, model):
 
         # If no direct matches, use the model to extract metadata
         try:
+            # Get prompts from settings if available, otherwise fall back to config
+            metadata_system = settings.nugget_prompts.get('metadata_system') if hasattr(settings, 'nugget_prompts') else config.nugget_prompts['metadata_system']
+            metadata_user = settings.nugget_prompts.get('metadata_user') if hasattr(settings, 'nugget_prompts') else config.nugget_prompts['metadata_user']
+
             response = model.run(
-                system_prompt=config.nugget_prompts['metadata_system'],
-                user_prompt=config.nugget_prompts['metadata_user'].format(chunk=chunk)
+                system_prompt=metadata_system,
+                user_prompt=metadata_user.format(chunk=chunk)
             )
 
             model_metadata = json.loads(response)
@@ -267,9 +279,13 @@ def extract_paper_metadata(chunk, model):
 def lookup_doi(title, first_author, model):
     """Search for and return the paper's DOI using title and first author."""
     try:
+        # Get prompts from settings if available, otherwise fall back to config
+        doi_system = settings.nugget_prompts.get('doi_system') if hasattr(settings, 'nugget_prompts') else config.nugget_prompts['doi_system']
+        doi_user = settings.nugget_prompts.get('doi_user') if hasattr(settings, 'nugget_prompts') else config.nugget_prompts['doi_user']
+
         response = model.run(
-            system_prompt=config.nugget_prompts['doi_system'],
-            user_prompt=config.nugget_prompts['doi_user'].format(
+            system_prompt=doi_system,
+            user_prompt=doi_user.format(
                 title=title,
                 first_author=first_author
             )
@@ -323,7 +339,29 @@ def deduplicate_facts(facts, model, similarity_threshold=0.88, confidence_thresh
     Returns:
         list: Filtered and de-duplicated list of facts
     """
-    high_confidence_facts = [f for f in facts if f['confidence'] >= confidence_threshold]
+    if not isinstance(facts, list):
+        config.logger.warning(f"Expected list of facts, got {type(facts)}")
+        return []
+
+    # Ensure all facts have valid confidence values and are properly structured
+    validated_facts = []
+    for fact in facts:
+        if not isinstance(fact, dict):
+            continue
+
+        if 'claim' not in fact or 'confidence' not in fact:
+            continue
+
+        # Convert confidence to float if it's not already
+        try:
+            fact['confidence'] = float(fact['confidence'])
+        except (ValueError, TypeError):
+            fact['confidence'] = 0.5  # Default if conversion fails
+
+        validated_facts.append(fact)
+
+    # Filter by confidence
+    high_confidence_facts = [f for f in validated_facts if f['confidence'] >= confidence_threshold]
     if not high_confidence_facts:
         return []
 
@@ -332,16 +370,21 @@ def deduplicate_facts(facts, model, similarity_threshold=0.88, confidence_thresh
     for fact in high_confidence_facts:
         is_duplicate = False
         for existing_fact in unique_facts:
-            response = model.run(
-                system_prompt=config.prompts['fact_comparison_system'],
-                user_prompt=config.prompts['fact_comparison_user'].format(
-                    fact1=fact['claim'],
-                    fact2=existing_fact['claim']
-                )
-            )
             try:
+                # Get prompts from settings if available, otherwise fall back to config
+                fact_comparison_system = settings.prompts.get('fact_comparison_system') if hasattr(settings, 'prompts') else config.prompts['fact_comparison_system']
+                fact_comparison_user = settings.prompts.get('fact_comparison_user') if hasattr(settings, 'prompts') else config.prompts['fact_comparison_user']
+
+                response = model.run(
+                    system_prompt=fact_comparison_system,
+                    user_prompt=fact_comparison_user.format(
+                        fact1=fact['claim'],
+                        fact2=existing_fact['claim']
+                    )
+                )
+
                 similarity_data = json.loads(response)
-                similarity = similarity_data['similarity_score']
+                similarity = float(similarity_data.get('similarity_score', 0))
 
                 if similarity > similarity_threshold:
                     if fact['confidence'] > existing_fact['confidence']:
@@ -351,8 +394,8 @@ def deduplicate_facts(facts, model, similarity_threshold=0.88, confidence_thresh
                     else:
                         is_duplicate = True
                         break
-            except (json.JSONDecodeError, KeyError) as e:
-                config.logger.warning(f"Error parsing similarity response: {e}")
+            except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
+                config.logger.warning(f"Error comparing facts: {e}")
                 continue
 
         if not is_duplicate:
@@ -373,10 +416,14 @@ def extract_atomic_facts(chunk, model):
         list: A list of dicts with structure: [{"claim": "...", "span": "...", "confidence": 0.95}]
     """
     try:
-        formatted_user_message = config.prompts['fact_extraction_user'].format(chunk=chunk)
+        # Get prompts from settings if available, otherwise fall back to config
+        fact_extraction_user = settings.prompts.get('fact_extraction_user') if hasattr(settings, 'prompts') else config.prompts['fact_extraction_user']
+        fact_extraction_system = settings.prompts.get('fact_extraction_system') if hasattr(settings, 'prompts') else config.prompts['fact_extraction_system']
+
+        formatted_user_message = fact_extraction_user.format(chunk=chunk)
         response = model.run(
             user_prompt=formatted_user_message,
-            system_prompt=config.prompts['fact_extraction_system']
+            system_prompt=fact_extraction_system
         )
 
         facts = json.loads(response)
@@ -497,20 +544,15 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
         # If the nugget was not already created (or not the first chunk), extract facts.
         if nugget is None:
             facts = extract_atomic_facts(chunk, model)
-            if facts and len(facts) > 1:
-                # Deduplicate facts within the chunk only.
-                facts = deduplicate_facts(
-                    facts,
-                    model,
-                    similarity_threshold=0.88,
-                    confidence_threshold=0.0  # Do not filter based on confidence at chunk level.
-                )
-                config.logger.info(f"Deduplicated to {len(facts)} unique facts within chunk.")
-            nugget = {
-                "doi": doi,
-                "facts": facts
-            }
-            chunk_success = True
+            if isinstance(facts, list) and facts:
+                nugget = {
+                    "doi": doi,
+                    "facts": facts  # Use facts directly since they're already validated in extract_atomic_facts
+                }
+                chunk_success = True
+                config.logger.info(f"Successfully processed {len(facts)} facts")
+            else:
+                config.logger.warning(f"No valid facts extracted for chunk {chunknum}")
 
     except Exception as e:
         if config.shutdown_event.is_set():
@@ -753,4 +795,5 @@ def process_directory(model, input_dir: str, output_file: str = "nuggets.jsonl",
         f"Shared counters: {shared_counters}\n"
         f"Total nuggets saved to {output_file}: {total_nuggets_processed}"
     )
+
 

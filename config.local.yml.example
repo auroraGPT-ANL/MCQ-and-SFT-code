@@ -1,0 +1,41 @@
+# Local model configurations - EXAMPLE FILE
+# This file contains model-specific settings that can vary between developers
+# Copy this to config.local.yml and customize as needed
+
+# Model A - default for score_answers.py
+model:
+  name:        "openai:gpt-4.1-mini"
+  #name: "cels:locallama"
+  #name:        "cels:scout"
+  #name:        "argo:gpt4large"
+  temperature:  0.7  
+  baseModel:   "None"
+  Tokenizer:   "None"
+
+# Model B - for score_answers.py and knowledge testing
+model_b:
+  #name: "cels:locallama"
+  #name:        "cels:scout"
+  name:         "openai:gpt-4.1-nano"
+  #name:         "argo:gpt4"
+  temperature:   0.0
+  baseModel:    "None"
+  Tokenizer:    "None"
+
+# Model C
+model_c:
+  name: "cels:CePO"
+  #name:         "argo:gpt35"
+  #name:        "alcf:meta-llama/Meta-Llama-3-8B-Instruct"
+  temperature:  0.7
+  baseModel:   "None"
+  Tokenizer:   "None"
+
+# Model D
+model_d:
+  #name:        "alcf:mistralai/Mistral-7B-Instruct-v0.3"
+  #name:         "argo:gpt4turbo"
+  temperature:  0.7
+  baseModel:   "None"
+  Tokenizer:   "None"
+

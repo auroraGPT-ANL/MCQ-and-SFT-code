@@ -13,10 +13,22 @@ import logging
 import concurrent.futures
 from typing import Optional, List, Tuple
 from tqdm import tqdm
+from common import config  # Keep for backward compatibility
+import logging
+import sys
 
-from common import config
+# -----------------------------------
+# Logging: default WARNING unless -v/--verbose
+level = logging.DEBUG if "-v" in sys.argv or "--verbose" in sys.argv else logging.WARNING
+logging.basicConfig(format="%(levelname)s:%(name)s: %(message)s", level=level)
+logging.getLogger("httpx").setLevel(level)
+# -----------------------------------
+
+from common.loader import load_settings
 from common.model_access import Model
 
+# Initialize settings
+settings = load_settings()
 
 def score_answer(index: int,
                  model: Model,
@@ -27,23 +39,42 @@ def score_answer(index: int,
     Evaluate how consistent user_answer is with reference using model.
     Returns score as float.
     """
-    eval_prompt = config.score_main_prompt.format(
+    # Get prompts from settings with fallback to config
+    scoring_prompts = getattr(settings, 'scoring_prompts', {})
+    main_prompt = (scoring_prompts.get('main_mcq_prompt', None)
+                  if isinstance(scoring_prompts, dict)
+                  else config.score_main_prompt)
+    main_system = (scoring_prompts.get('main_mcq_system', None)
+                  if isinstance(scoring_prompts, dict)
+                  else config.score_main_system)
+    fallback_prompt_template = (scoring_prompts.get('fallback_mcq_prompt', None)
+                              if isinstance(scoring_prompts, dict)
+                              else config.score_fallback_prompt)
+    fallback_system = (scoring_prompts.get('fallback_mcq_system', None)
+                      if isinstance(scoring_prompts, dict)
+                      else config.score_fallback_system)
+
+    # Use the prompts that were found
+    main_prompt = main_prompt or config.score_main_prompt
+    main_system = main_system or config.score_main_system
+    fallback_prompt_template = fallback_prompt_template or config.score_fallback_prompt
+    fallback_system = fallback_system or config.score_fallback_system
+
+    eval_prompt = main_prompt.format(
         question=question,
         reference_answer=reference,
         user_answer=user_answer
     )
-    system_msg = config.score_main_system
     response = model.run(
         user_prompt=eval_prompt,
-        system_prompt=system_msg,
+        system_prompt=main_system,
         temperature=0.0
     )
     try:
         return float(response)
     except ValueError:
         # fallback
-        fallback_prompt = config.score_fallback_prompt.format(user_answer=user_answer)
-        fallback_system = config.score_fallback_system
+        fallback_prompt = fallback_prompt_template.format(user_answer=user_answer)
         try:
             resp = model.run(
                 user_prompt=fallback_prompt,
@@ -99,7 +130,7 @@ def score_answers_file(
     modelA_name: str,
     modelB_name: str,
     output_dir: str,
-    parallel: int = 4,
+    parallel: int = None,  # Default will come from settings/config
     force: bool = False,
     cache_dir: Optional[str] = None,
     quiet: bool = False,
@@ -119,6 +150,10 @@ def score_answers_file(
     else:
         config.logger.setLevel(logging.WARNING)
         use_bar = True
+
+    # Get default parallel workers from settings with fallback to config
+    if parallel is None:
+        parallel = settings.quality.defaultThreads if hasattr(settings, 'quality') else 4
     # HF cache
     if cache_dir:
         os.environ["HF_HOME"] = cache_dir
@@ -165,7 +200,9 @@ def score_answers_file(
                     buffer.append(item)
                     scores.append(item['score'])
                     total_eval += et
-                if len(buffer) >= config.saveInterval:
+                # Get save interval from settings with fallback to config
+                save_interval = settings.quality.save_interval if hasattr(settings, 'quality') else config.saveInterval
+                if len(buffer) >= save_interval:
                     for it in buffer:
                         out_f.write(json.dumps(it, ensure_ascii=False) + "\n")
                     out_f.flush()
@@ -187,17 +224,23 @@ def score_answers_file(
 
 
 def main():
+    # Get defaults from settings with fallback to config
+    default_model_a = settings.workflow.extraction if hasattr(settings, 'workflow') else config.model['name']
+    default_model_b = settings.workflow.target if hasattr(settings, 'workflow') else config.model_b['name']
+    default_threads = settings.quality.defaultThreads if hasattr(settings, 'quality') else 4
+    results_dir = settings.directories.results if hasattr(settings, 'directories') else config.results_dir
+
     parser = argparse.ArgumentParser(
         description='Score answers: LLM B rates answers from LLM A'
     )
-    parser.add_argument('-a','--modelA_name', default=config.model['name'])
-    parser.add_argument('-b','--modelB_name', default=config.model_b['name'])
-    parser.add_argument('-o','--output', default=config.results_dir)
+    parser.add_argument('-a','--modelA_name', default=default_model_a)
+    parser.add_argument('-b','--modelB_name', default=default_model_b)
+    parser.add_argument('-o','--output', default=results_dir)
     parser.add_argument('-f','--force', action='store_true')
     parser.add_argument('-c','--cache-dir', default=os.getenv('HF_HOME'))
     parser.add_argument('-q','--quiet', action='store_true')
     parser.add_argument('-v','--verbose', action='store_true')
-    parser.add_argument('-p','--parallel', type=int, default=4)
+    parser.add_argument('-p','--parallel', type=int, default=default_threads)
     args = parser.parse_args()
     out = score_answers_file(
         modelA_name=args.modelA_name,

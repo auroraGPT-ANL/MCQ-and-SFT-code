@@ -20,53 +20,12 @@ http_client:
   pool_connections: 1      # connection pool size
   pool_maxsize: 1          # maximum pool size
 
-model_type_endpoints:
-  openai: "https://api.openai.com/v1"
-  argo: "https://apps.inside.anl.gov/argoapi/api/v1/resource/chat"
-  argo_dev: "https://apps-dev.inside.anl.gov/argoapi/api/v1/resource/chat"
-
-# Model 
-# temperature, base model, tokenizer applied to whatever model is specified
-# on the command line. Model name below is used if no model is specified on 
-# the comment line.
-#
-# 
-# this model is the default for Model-A for score_answers.py
-#
-model:
-  #name:        "openai:gpt-4"
-  name:        "argo:gpt4large"
-  temperature:  0.7  
-  baseModel:   "None"
-  Tokenizer:   "None"
-
-# model-B for score_answers.py
-# model-B also the model whose knowledge is tested w.r.t. factoid nuggets
-#         (note Temperature=0 is necessary)
-
-model_b:
-  #name:         "openai:gpt-4"
-  name:         "argo:gpt4"
-  temperature:   0.0
-  baseModel:    "None"
-  Tokenizer:    "None"
-
-#model_c:
-  #name:        "alcf:meta-llama/Meta-Llama-3-8B-Instruct"
-  #temperature : 0.7
-  #baseModel:   "None"
-  #Tokenizer:   "None"
-
-#model_d:
-  #name:        "alcf:mistralai/Mistral-7B-Instruct-v0.3"
-  #temperature:  0.7
-  #baseModel:   "None"
-  #Tokenizer:   "None"
-
 # Argo API configuration
 argo:
   username_file: secrets.yml  # Path to secrets file containing Argo credentials
 
+bsc:
+  model_root: /gpfs/projects/bsc88/hf-models
 
 # Other MCQ-related parameters
 
@@ -83,25 +42,19 @@ quality:
 # If you need a literal brace in your prompt (e.g., "\[ \boxed{3} \]"),
 # you must double them like "\[ \boxed{{3}} \]". 
 # ALSO: avoid putting placeholders in single quotes, as that can trigger KeyError.
+
+#=================================================================================
 #
-# ----------------------------------------------------------------
+# Prompts for generate_mcqs.py, which uses a model to generate MCQs from text
 #
-# Prompts for generate_mcqs.py
-# 
-# Iteration with model to generate MCQ Q/A pairs
-#
-#
-## Prompts for generate_mcqs.py
-# 
-# Iteration with model to generate MCQ Q/A pairs
-#
+#=================================================================================
 
 prompts:
 
-  # Step 1
-  system_message: |
+  # ===== Step 1: Summarize text in bullet points and expand =====
+  system_message_1: |
     You are a helpful assistant that summarizes text in bullet points and expands on them using your broader knowledge. Name this result 'augmented_chunk'.
-  user_message: |
+  user_message_1: |
     Given the following chunk of text, please:
 
     1. Summarize the text in bullet points.
@@ -112,7 +65,7 @@ prompts:
 
     Return the result as a JSON object with key 'augmented_chunk' and the value should be your bullet points and comments.  The comments should be no longer than 100 words and should not include your reasoning narrative.
 
-  # Step 4: Atomic fact extraction (for identifying novel facts)
+  # ===== Step 4: Atomic fact extraction (for identifying novel facts) =====
   fact_extraction_system: |
     You are a precise fact extractor that identifies atomic, verifiable factual statements in scientific text.
     An atomic fact is a single, standalone claim that can be verified as true or false.
@@ -159,8 +112,19 @@ prompts:
     0.5-0.79 = partially overlapping information
     0.0-0.49 = different facts
 
-  # Step 5: Fact validation (to assess if facts are actually valid claims)
-  # Step 5: Fact validation (to assess if facts are actually valid claims)
+  evaluate_known_facts_system: |
+    You are a fact-checking assistant that assesses the validity of factual claims.
+    You evaluate if you already know these facts based on your pretraining. 
+    You provide a True or False answer for each fact, with True indicating you already know the fact and False indicating you do not.
+    Return your assessment in a structured JSON format.
+
+  evaluate_known_facts_user: |
+    Which of the following claims do you already know based on your pretraining? 
+    
+    Claims to evaluate:
+    {claims_json}
+
+  # ===== Step 5: Fact validation (to assess if facts are actually valid claims) =====
   fact_validation_system: |
     You are a fact-checking assistant that assesses the validity of factual claims.
     You evaluate how precise, accurate, and well-supported each claim is based on the provided evidence.
@@ -183,32 +147,62 @@ prompts:
     - Brief reason for your assessment
 
     Return as a JSON array maintaining the same structure as the input, but with potentially revised claims and confidence scores.
-  # Step 2
-  system_message_2: |
-    You are a helpful assistant that generates exactly ONE multiple-choice question based on the provided text (augmented_chunk). The question must have 5 possible answers, numbered 1 to 5. Exactly one of these 5 choices is correct. Mark the correct choice with '(*)' at the end for later grading.
-  user_message_2: |
+
+  # ===== Step 2: Generate MCQ =====
+  system_message_mcq_2: |
+    You are a helpful assistant that generates exactly ONE multiple-choice question based on the provided text (augmented_chunk). The question must have exactly {num_answers} unique possible answers, numbered 1 to {num_answers}. Each answer must be distinct - do not repeat any answer choices. Exactly one of these {num_answers} choices is correct. Mark the correct choice with '(*)' at the end for later grading.
+  user_message_mcq_2: |
     Below is some content called augmented_chunk.
     Please:
     1) Create exactly one multiple-choice question that can be answered by the augmented_chunk.
-    2) Provide five distinct options (1 to 5) as answers.
+    2) Provide exactly {num_answers} distinct options (1 to {num_answers}) as answers. Each answer must be unique - do not repeat any choices.
     3) Mark the correct answer with '(*)' at the end of that particular option.
 
     Constraints:
     - The question and answers must be self-contained and understandable without referencing the chunk.
     - Do not mention 'chunk' or 'augmented_chunk' or 'article' or 'study' in the final output.
+    - Each answer choice must be unique - do not repeat any choices.
+    - Number answers consecutively from 1 to {num_answers}.
 
     augmented_chunk:
     {augmented_chunk}
 
-  # Step 33
-  system_message_3: |
-    You are a helpful assistant that evaluates how well an answer matches the question in context of the augmented_chunk. Return your evaluation strictly as valid JSON with no additional text, with precisely three key-value pairs: answer, score, and comment. No additional formatting or text should be included, just these three key-value pairs in valid JSON format.
-  user_message_3: |
+  # ===== Step 3 for MCQs =====
+  system_message_mcq_3: |
+    You are a helpful assistant that evaluates a MCQ in the context of the augmented_chunk. 
+    You are to Evaluate the MCQ from the perspective of its suitability as an MCQ designed to evaluate an LLM,
+    and to return your evaluation strictly as valid JSON with no additional text, with precisely two key-value pairs.
+    No additional formatting or text should be included, just these two key-value pairs in valid JSON format.
+
+  user_message_mcq_3: |
     augmented_chunk:
     {augmented_chunk}
 
     question:
     {generated_question}
+
+    choices:
+    {generated_choices}
+
+    Please provide, in JSON format, an evaluation of the multiple-choice question above. Report in JSON with two key-value pairs:
+    1. One key-value pair with key 'score' and as value an integer in the range 1 to 10 indicating your rating of the MCQ.
+    2. A second key-value pair with key 'rationale' and as value a string justifying your assigned score
+    
+    Thus, you are to return a valid JSON object containing exactly two keys: 'score', and a numeric value; and 'rationale', and a string value.
+
+  # ===== Step 3 for QA pairs =====
+  system_message_qa_3: |
+    You are a helpful assistant that evaluates how well an answer matches the question in context of the augmented_chunk. Return your evaluation strictly as valid JSON with no additional text, with precisely three key-value pairs: answer, score, and comment. No additional formatting or text should be included, just these three key-value pairs in valid JSON format.
+
+  user_message_qa_3: |
+    augmented_chunk:
+    {augmented_chunk}
+
+    question:
+    {generated_question}
+
+    choices:
+    {generated_choices}
 
     Please provide, in JSON format:
     1. An appropriate answer to the multiple-choice question above. Report in JSON as the value for the key 'answer'.
@@ -217,12 +211,235 @@ prompts:
 
     Return a valid JSON object containing exactly three keys: 'answer', 'score', and 'comment'.
 
+
+
+#=================================================================================
+#
+# Prompts for extract_facts.py
+#
+#=================================================================================
+extract_prompts:
+  system_message_data_extract: |
+    You are a precise fact extractor that identifies atomic, verifiable factual statements about polymers in scientific text.
+    An atomic fact is a single, standalone claim that can be verified as true or false.
+    Focus on extracting specific claims, findings, methodologies, and results.
+    Return your output in a structured JSON format.
+
+  user_message_data_extract: |
+    You are tasked with extracting key polymer properties from materials research papers. Some papers may discuss multiple polymers, and it is essential that you include all extractable polymers. For every polymer mentioned in the paper with any extractable information—even if some fields are missing—create an object in a "polymers" array. If a sub-entry is blank (i.e., no information is provided), omit that sub-entry from the final JSON output to reduce token usage.
+
+    The following is the data from which you are to extract data:
+        {data}
+
+    Follow these steps and guidelines carefully:
+
+    1. Extract Polymer-Specific Properties:
+    For each polymer in the paper, extract the following properties if available. Ensure that every polymer mentioned is included in the final JSON output.
+
+    • Polymer Identification & Structure:
+      - polymer_name: e.g., "Polyethylene", "Polystyrene"
+      - structure: A description or SMILES notation
+      - common_abbreviation: e.g., "PE", "PS"
+
+    • Molecular Characteristics:
+      - polydispersity: Include a numeric value and an optional "range_notes" if a range is provided
+      - degree_of_polymerization: Represented as "n", with value and "range_notes" if applicable
+      - molecular_weight: Value with unit "g/mol" and "range_notes"
+      - melting_point: Value with unit "°C" and "range_notes"
+      - glass transition temperature: Value with unit  "°C" and "range_notes"
+
+    • Interaction Parameters:
+    Under an "interactions" object, extract:
+      - solvent_interactions: Array of objects containing:
+        * solvent_name: Name of the solvent
+        * chi_parameter: Value with "range_notes"
+        * temperature: Value with unit "°C"
+        * method: How the parameter was determined
+      - polymer_interactions: Array of objects containing:
+        * second_polymer: Name of the other polymer
+        * chi_parameter: Value with "range_notes"
+        * temperature: Value with unit "°C"
+        * method: How the parameter was determined
+
+    • Rheological Properties:
+    Under a "rheological_properties" object, extract:
+      - viscosity: Value with unit "Pa·s" and "range_notes"
+      - viscoelastic_properties:
+        * storage_modulus (G′): Value with unit "Pa", conditions object, and "range_notes"
+        * loss_modulus (G″): Same structure as storage_modulus
+        * tan_delta: Value (dimensionless) with conditions and "range_notes"
+      - transient_response:
+        * relaxation_modulus: Value with unit "Pa" and "range_notes"
+        * creep_compliance: Value with unit "1/Pa" and "range_notes"
+        * creep_recovery: Value with unit "%" and "range_notes"
+    
+    2. Data Validation Checklist:
+    Before submitting output, verify you have captured:
+    - ALL solvent-polymer interaction parameters for each polymer
+    - ALL polymer-polymer interaction parameters
+    - ALL molecular characteristics
+    - Temperature conditions for ALL parameters
+    - Error ranges/uncertainties where provided
+    - Experimental methods used to determine parameters
+    - Units for all numerical values
+    
+    3. Extract Qualitative Insights:
+    - Capture any important qualitative or contextual observations in a "qualitative_insights" array
+    - Include observations about polymer compatibility
+    - Note any unusual processing conditions or experimental methods
+    - Document observed trends or patterns
+    
+    4. Source References:
+    For each extracted metric or qualitative insight, include in "source_references":
+    - metric: The field or property referenced
+    - page: The page number
+    - quote: An exact quote
+    - confidence: "high", "medium", or "low"
+    - inferred: true if value was deduced rather than directly stated
+    
+    5. Output Format:
+    Your final output must be pure JSON following this schema:
+    
+    {
+      "polymers": [
+        {
+          "polymer_name": "",
+          "structure": "",
+          "common_abbreviation": "",
+          "molecular_weight": {
+            "value": null,
+            "unit": "g/mol",
+            "range_notes": ""
+          },
+          "polydispersity": {
+            "value": null,
+            "range_notes": ""
+          },
+          "interactions": {
+            "solvent_interactions": [
+              {
+                "solvent_name": "",
+                "chi_parameter": {
+                  "value": null,
+                  "range_notes": "",
+                  "temperature": {
+                    "value": null,
+                    "unit": "°C"
+                  }
+                },
+                "method": ""
+              }
+            ],
+            "polymer_interactions": [
+              {
+                "second_polymer": "",
+                "chi_parameter": {
+                  "value": null,
+                  "range_notes": "",
+                  "temperature": {
+                    "value": null,
+                    "unit": "°C"
+                  }
+                },
+                "method": ""
+              }
+            ]
+          },
+           "molecular_characteristics": {
+                    "glass_transition_temperature": {
+                        "value": 20,
+                        "unit": "°C"
+                    }
+                },
+          "rheological_properties": {
+            "viscosity": {
+              "value": null,
+              "unit": "Pa·s",
+              "range_notes": ""
+            },
+            "viscoelastic_properties": {
+              "storage_modulus": {
+                "value": null,
+                "unit": "Pa",
+                "range_notes": "",
+                "conditions": {
+                  "temperature": {
+                    "value": null,
+                    "unit": "°C"
+                  },
+                  "frequency": {
+                    "value": null,
+                    "unit": "Hz"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "qualitative_insights": [],
+      "source_references": [
+        {
+          "metric": "",
+          "page": null,
+          "quote": "",
+          "confidence": "high/medium/low",
+          "inferred": false
+        }
+      ]
+    }
+    
+    Return your output as pure JSON starting with "{" and following the schema exactly. Before submitting, verify that you have captured ALL interaction parameters (both solvent-polymer and polymer-polymer) and their associated conditions.
+
+
+#=================================================================================
+#
+# Prompts for generate_answers.py
+#
+#=================================================================================
+answering_prompts:
+  system_message_mcq_answer: |
+    You are a helpful assistant that answers a supplied multiple-choice question. You should return just the number of the best answer in a valid JSON document with key 'answer' and value the number. No additional formatting or text should be included.
+
+  user_message_mcq_answer: |
+    question:
+    {question}
+
+    choices:
+    {choices}
+
+    Please provide, in JSON format:
+    A number from 1 to {num_answers} representing the best answer to the multiple-choice question above. Provide a valid JSON object containing exactly one key, 'answer'. No additional formatting or text should be included.
+
+
+
+#=================================================================================
 #
 # Prompts for score_answers.py
 #
+#=================================================================================
 scoring_prompts:
-  main_system: "You are a strict grader. Respond with only the number."
-  main_prompt: |
+  main_mcq_system: "You are a strict grader. Respond only with 0 or 1."
+  main_mcq_prompt: |
+    You are a strict grader.
+    
+    Question: {question}
+    Reference Answer: {reference_answer}
+    User's Answer: {user_answer}
+
+    Return 1 if the reference answer is identical to the user's answer, and 0 otherwise. Provide just a 0 or a 1.
+
+  fallback_mcq_system: "Extract a single number and score based on that."
+  fallback_mcq_prompt: |
+    Extract a final answer from this user response. Sometimes this appears at the end after the words "**Final Answer**", enclosed in the characters "[ \\boxed{{" and "}} ]".
+    For example, "[ \\boxed{{3}} ]" for the answer "3".
+    Then compare the reference answer and the user answer, and return 1 if they are the same, and 0 if they are not.
+
+    Here is the user response:
+    {user_answer}
+
+  main_qa_system: "You are a strict grader. Respond with only the number."
+  main_qa_prompt: |
     You are a strict grader.
 
     Question: {question}
@@ -230,13 +447,15 @@ scoring_prompts:
     User's Answer: {user_answer}
 
     On a scale of 1 to 10 (10 = exactly matches the reference answer, 1 = completely incorrect), provide ONLY the numeric score that reflects how well the User's Answer matches the Reference Answer. Provide just a number.
-  fallback_system: "Extract a single number"
-  fallback_prompt: |
+
+  fallback_qa_system: "Extract a single number"
+  fallback_qa_prompt: |
     Extract a final answer from this user response. Sometimes this appears at the end after the words "**Final Answer**", enclosed in the characters "[ \\boxed{{" and "}} ]".
     For example, "[ \\boxed{{3}} ]" for the answer "3".
 
     Here is the user response:
     {user_answer}
+
 
 #
 # Prompts for generate_nugget.py

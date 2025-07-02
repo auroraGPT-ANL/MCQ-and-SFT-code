@@ -1,9 +1,8 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """common.model_access
    A flexible wrapper that can talk to multiple back‑ends (OpenAI, Argo, ALCF,
-   local vLLM, Hugging‑Face, etc.).  Refactored to import the whole *config*
-   module so new secrets / parameters can be accessed without editing this file.
+   local vLLM, Hugging‑Face, etc.). Uses settings.endpoints for configuration.
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ import socket
 import subprocess
 import sys
 import time
-from typing import Any
+from typing import Any, Optional
 import threading
 
 import requests
@@ -25,198 +24,147 @@ from requests.exceptions import Timeout
 from transformers import (AutoModelForCausalLM, AutoTokenizer,
                           GenerationConfig)
 
-from common import config
-from common.inference_auth_token import get_access_token
+# Import settings system
+from settings import load_settings, Settings
 from common.exceptions import APITimeoutError
+from common.inference_auth_token import get_access_token
 from common.alcf_inference_utilities import get_names_of_alcf_chat_models
 from test.test_model import TestModel  # local stub for offline testing
 
 # ---------------------------------------------------------------------------
-# Local aliases for readability 
+# Settings initialization
 # ---------------------------------------------------------------------------
-logger = config.logger
-timeout = config.timeout
-initiate_shutdown = config.initiate_shutdown
-argo_user = config.argo_user
+from pydantic import ValidationError
+try:
+    settings = load_settings()
+except ValidationError as e:
+    first = e.errors()[0]
+    print(f"❌  {first['msg']}")
+    sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Local aliases for readability
+# ---------------------------------------------------------------------------
+logger = getattr(settings, 'logger', None)
+if logger is None:
+    import logging
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(level=logging.INFO)
+
+timeout = settings.timeout
+initiate_shutdown = None  # Will be populated from config if needed
 
 # Thread safety for error reporting
 error_lock = threading.Lock()
 
-# ---------------------------------------------------------------------------
-# Constants 
-# ---------------------------------------------------------------------------
-
 
 class Model:
     """Unified interface for multiple chat/completions back‑ends."""
-    
-    # Class-level error tracking
-    _api_error_counts = {
-        'OpenAI': 0,
-        'Argo': 0,
-        'CAFE': 0
-    }
-    _error_count_lock = threading.Lock()  # Lock for thread-safe counter updates
+
+    # Class-level error tracking - keyed by provider name from endpoints
+    _api_error_counts = {}
+    _error_count_lock = threading.Lock()
 
     # Core Methods
     # -----------------------------------------------------------------------
     def __init__(self, model_name: str, parallel_workers: int = None):
+        """Initialize model interface using endpoint configuration."""
         self.model_name = model_name
         self.parallel_workers = parallel_workers
         self.base_model: Any | None = None
         self.tokenizer: Any | None = None
-        self.temperature = 0.7
-
+        self.temperature = settings.default_temperature
         self.headers = {"Content-Type": "application/json"}
         self.endpoint: str | None = None
         self.model_type: str | None = None
         self.key: str | None = None
         self.client_socket: socket.socket | None = None
         self.status = "UNKNOWN"
-        self.argo_user: str | None = None
-
-        # Branch on prefix -----------------------------------------------------
-        if model_name.startswith("local:"):
-            # ------------------------------------------------------------------
-            # Local vLLM server 
-            # ------------------------------------------------------------------
-            self.model_name = model_name.split("local:")[1]
-            self.model_type = "vLLM"
-            self.endpoint = "http://localhost:8000/v1/chat/completions"
-            logger.info(f"Local vLLM model: {self.model_name}")
-
-        elif model_name.startswith("pb:"):
-            # ------------------------------------------------------------------
-            # PBS‑launched Hugging‑Face model on HPC 
-            # ------------------------------------------------------------------
-            self._init_pbs_model(model_name)
-
-        elif model_name.startswith("hf:"):
-            # ------------------------------------------------------------------
-            # Local Hugging Face model 
-            # ------------------------------------------------------------------
-            self._init_hf_model(model_name)
-
-        elif model_name.startswith("alcf:"):
-            self._init_alcf_model(model_name)
-
-        elif model_name.startswith("cafe:"):
-            self._init_cafe_model(model_name)
-
-        elif model_name.startswith("openai:"):
-            self._init_openai_model(model_name)
-
-        elif model_name.startswith("argo:") or model_name.startswith("argo-dev:"):
-            self._init_argo_model(model_name)
-
-        elif model_name.startswith("test:"):
+        
+        # Special case for test models
+        if model_name.startswith("test:"):
             self._init_test_model(model_name)
-
+            return
+            
+        # Handle provider:model format
+        if ":" in model_name:
+            provider, model_id = model_name.split(":", 1)
+            # Find endpoint by provider
+            for name, ep in settings.endpoints.items():
+                if ep.provider.value.lower() == provider.lower():
+                    self.endpoint_config = ep
+                    self.model_name = model_id
+                    break
+            else:
+                logger.error(f"No endpoint configuration found for provider: {provider}")
+                if initiate_shutdown:
+                    initiate_shutdown(f"Unknown provider: {provider}")
+                raise ValueError(f"No endpoint configuration found for provider: {provider}")
         else:
-            logger.error(f"Unrecognised model specifier: {model_name}")
-            initiate_shutdown("Model initialisation failed.")
+            # Find endpoint by shortname
+            shortname = model_name
+            for name, ep in settings.endpoints.items():
+                if ep.shortname.lower() == shortname.lower():
+                    self.endpoint_config = ep
+                    self.model_name = ep.model  # Use model from endpoint config
+                    break
+            else:
+                logger.error(f"No endpoint configuration found for model: {model_name}")
+                if initiate_shutdown:
+                    initiate_shutdown(f"Unknown model: {model_name}")
+                raise ValueError(f"No endpoint configuration found for model: {model_name}")
+                
+        # Set up model based on endpoint configuration
+        self.model_type = self.endpoint_config.provider.value.upper()
+        self.endpoint = self.endpoint_config.base_url
+        
+        # Get credential
+        cred_key = self.endpoint_config.cred_key
+        if cred_key not in settings.secrets:
+            logger.error(f"Missing credential: {cred_key}")
+            if initiate_shutdown:
+                initiate_shutdown(f"Missing credential: {cred_key}")
+            raise ValueError(f"Missing credential: {cred_key}")
+            
+        self.key = settings.secrets[cred_key].get_secret_value()
+        
+        # Special handling for provider types
+        provider = self.endpoint_config.provider.value
+        
+        if provider == "hf":
+            self._setup_huggingface()
+        elif provider == "alcf":
+            self._setup_alcf()
+            
+        logger.info(f"Initialized {self.model_type} model: {self.model_name}")
 
-    # -----------------------------------------------------------------------
-    #  Initialiser helpers 
-    # -----------------------------------------------------------------------
-    def _init_pbs_model(self, model_name: str):
-        self.model_name = model_name.split("pb:")[1]
-        self.model_type = "HuggingfacePBS"
-        self.model_script = "run_model.pbs"
-        self.status = "PENDING"
-        logger.info(f"Submitting Hugging‑Face PBS job for {self.model_name}")
-
-        # Submit and capture job‑ID
-        result = subprocess.run(["qsub", self.model_script], capture_output=True, text=True, check=True)
-        self.job_id = result.stdout.strip().split(".")[0]
-        self.wait_for_job_to_start()
-        self.connect_to_model_server()
-        self.client_socket.sendall(self.model_name.encode())
-        if self.client_socket.recv(1024).decode() != "ok":
-            initiate_shutdown("Model server init handshake failed.")
-        logger.info("Model server initialised.")
-
-    # "hf:<model>" - HF
-    def _init_hf_model(self, model_name: str):
-        self.model_type = "Huggingface"
-        self.model_name = model_name.split("hf:")[1]
-        logger.info(f"Loading local HF model: {self.model_name}")
-
-        cache_dir = os.getenv("HF_HOME")
-        # Prefer secret token; fall back to file for legacy setups
-        self.key = config.get_secret("huggingface.token")
-        if not self.key:
-            try:
-                with open("hf_access_token.txt", "r", encoding="utf-8") as fh:
-                    self.key = fh.read().strip()
-            except FileNotFoundError:
-                initiate_shutdown("Missing Hugging Face access token.")
-
+    def _setup_huggingface(self):
+        """Special setup for HuggingFace models."""
         login(self.key)
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, cache_dir=cache_dir)
-        self.base_model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto", cache_dir=cache_dir)
-        # Ensure pad/eos tokens
+        cache_dir = os.getenv("HF_HOME")
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.endpoint_config.model, 
+            cache_dir=cache_dir
+        )
+        self.base_model = AutoModelForCausalLM.from_pretrained(
+            self.endpoint_config.model,
+            device_map="auto",
+            cache_dir=cache_dir
+        )
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         self.base_model.config.pad_token_id = self.tokenizer.pad_token_id
         self.tokenizer.padding_side = "right"
-        self.endpoint = "http://huggingface.co"
 
-    # "alcf:<model>" - ALCF 
-    def _init_alcf_model(self, model_name: str):
+    def _setup_alcf(self):
+        """Special setup for ALCF models."""
         token = get_access_token()
-        self.model_name = model_name.split("alcf:")[1]
         if self.model_name not in get_names_of_alcf_chat_models(token):
-            initiate_shutdown(f"ALCF model {self.model_name} not in registry.")
-        self.model_type = "ALCF"
-        self.endpoint = "https://data-portal-dev.cels.anl.gov/resource_server/sophia/vllm/v1"
-        self.key = token
-        logger.info(f"ALCF model selected: {self.model_name}")
-
-    # "cafe:<model>" - Rick's secret server
-    def _init_cafe_model(self, model_name: str):
-        self.model_name = model_name.split("cafe:")[1]
-        self.model_type = "CAFE"
-        self.endpoint = "https://195.88.24.64/v1"
-        self.key = "CELS"  # placeholder
-        logger.info(f"Cafe model: {self.model_name}")
-
-    # "openai:<model>" - OpenAI
-    def _init_openai_model(self, model_name: str):
-        self.model_name = model_name.split("openai:")[1]
-        self.model_type = "OpenAI"
-        self.endpoint = config.model_type_endpoints['openai']
-
-        # look first in secrets.yml; fall back to openai_access_token.txt and nudge the user to use secrets.yml
-        self.key = config.get_secret("openai.access_token")
-        if not self.key:
-            try:
-                with open("openai_access_token.txt", "r", encoding="utf-8") as fh:
-                    self.key = fh.read().strip()
-                logger.info(
-                    "OpenAI access token found in openai_access_token.txt - please move it to secrets.yml\n"
-                    "YAML format:\n"
-                    "openai:\n"
-                    "      access_token: YOUR_OPENAI_ACCESS_TOKEN"
-                )
-            except FileNotFoundError:
-                initiate_shutdown("Missing OpenAI access token.")
-        logger.info(f"OpenAI model: {self.model_name}")
-
-
-    # "argo:<model>" - Argonne ARGO
-    def _init_argo_model(self, model_name: str):
-        # Split off prefix and identify if its dev or standard argo
-        prefix, model = model_name.split(":")
-        self.model_name = model
-        self.model_type = "Argo"
-        # Select endpoint based on prefix
-        self.endpoint = config.model_type_endpoints['argo_dev'] if prefix == "argo-dev" else config.model_type_endpoints['argo']
-        self.argo_user = argo_user or config.get_secret("argo.username")
-        if not self.argo_user:
-            initiate_shutdown("Argo username not found in secrets.yml.")
-        self.key = "sk‑dummy‑key"  # placeholder for OpenAI‑compatible header
-        logger.info(f"Argo model: {self.model_name} (user = {self.argo_user})")
+            logger.error(f"ALCF model {self.model_name} not in registry")
+            if initiate_shutdown:
+                initiate_shutdown(f"ALCF model {self.model_name} not in registry")
+            raise ValueError(f"ALCF model {self.model_name} not in registry")
 
     # "test:<model>" - Local stub model for offline testing
     def _init_test_model(self, model_name: str):
@@ -226,57 +174,17 @@ class Model:
         self.test_model = TestModel(self.model_name)
         logger.info(f"Loaded TestModel stub ({self.model_name})")
 
-    # -----------------------------------------------------------------------
-    #  PBS helper methods 
-    # -----------------------------------------------------------------------
-    def wait_for_job_to_start(self):
-        """Monitor job status and get assigned compute node"""
-        while True:
-            qstat_output = subprocess.run(["qstat", "-f", self.job_id],
-                                          capture_output=True, text=True).stdout
-            match = re.search(r"exec_host = (\S+)", qstat_output)
-            if match:
-                self.compute_node = match.group(1).split("/")[0]
-                logger.info(f"Job {self.job_id} is running on {self.compute_node}")
-                self.status = "RUNNING"
-                break
-            logger.info(f"Waiting for job {self.job_id} to start...")
-            time.sleep(5)  # Check every 5 seconds
-
-    def connect_to_model_server(self):
-        """Establish a persistent TCP connection to the model server"""
-        if self.status != "RUNNING":
-            raise RuntimeError("Model is not running. Ensure the PBS job is active.")
-
-        logger.info(f"Connecting to {self.compute_node} on port 50007...")
-        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        for count in range(10):
-            try:
-                self.client_socket.connect((self.compute_node, 50007))
-                break
-            except Exception as e:
-                if count < 9:  # Don't sleep on last attempt
-                    time.sleep(5)
-                    logger.warning(f"Trying connection again {count}")
-                else:
-                    return self._handle_api_error(e, " (connection failed)")
+    # No longer needed PBS helper methods have been removed
     def details(self):
-        """
-        Print basic info about the model to the logs.
-        """
+        """Print basic info about the model to the logs."""
         logger.info(f"Model name: {self.model_name}")
         logger.info(f"    Model type  = {self.model_type}")
         logger.info(f"    Endpoint    = {self.endpoint}")
         logger.info(f"    Temperature = {self.temperature}")
-        logger.info(f"    Base model  = {self.base_model}")
-        logger.info(f"    Tokenizer   = {self.tokenizer}")
-
-    def close(self):
-        """Close the cached connection when done."""
-        if self.client_socket:
-            logger.info("Closing connection to model server.")
-            self.client_socket.close()
-            self.client_socket = None
+        if self.base_model:
+            logger.info(f"    Base model  = {self.base_model}")
+        if self.tokenizer:
+            logger.info(f"    Tokenizer   = {self.tokenizer}")
 
     def run(
         self,
@@ -284,66 +192,50 @@ class Model:
         system_prompt='You are a helpful assistant',
         temperature=None
     ) -> str:
-        """
-        Calls this model to generate an answer to the user_prompt.
-        If temperature is not specified, we default to self.temperature.
-        """
+        """Generate response using the configured model."""
         if temperature is None:
-            temperature = self.temperature  # fallback
+            temperature = self.temperature
 
-        if self.model_type == 'Huggingface':
-            #logger.info(f"Generating with HF model: {self.model_name}")
-            return run_hf_model(user_prompt, self.base_model, self.tokenizer)
-
-        elif self.model_type == 'HuggingfacePBS':
-            if self.status != "RUNNING":
-                raise RuntimeError("Model is not running. Ensure the PBS job is active.")
-            if self.client_socket is None:
-                raise RuntimeError("Socket is not connected")
-            #logger.info(f"Sending input to HPC model: {user_prompt}")
-            self.client_socket.sendall(user_prompt.encode())
-            response = self.client_socket.recv(1024).decode()
-            #logger.info(f"HPC model response: {response}")
-            return response
-
-        elif self.model_type == 'vLLM':
-            return self._handle_api_model_request(user_prompt, system_prompt, temperature)
-
-        elif self.model_type in ['OpenAI', 'ALCF']:
-            return self._handle_openai_request(user_prompt, system_prompt, temperature)
-
-        elif self.model_type == 'Argo':
-            extra_data = {
-                "user": self.argo_user,
-                "stop": [],
-                "top_p": 0.9
-            }
-            return self._handle_api_model_request(user_prompt, system_prompt, temperature, extra_data)
-
-        elif self.model_type == 'CAFE':
-            return self._handle_api_model_request(user_prompt, system_prompt, temperature)
-
-        elif self.model_type == 'Test':
+        # Handle test models
+        if self.model_type == 'TEST':
             return self.test_model.generate_response(user_prompt, system_prompt)
 
-        else:
-            logger.error(f"Unknown model type: {self.model_type}.")
-            initiate_shutdown("Unknown model type. Exiting.")
+        # Handle HuggingFace models
+        if self.model_type == 'HF':
+            return run_hf_model(user_prompt, self.base_model, self.tokenizer)
+
+        # All other models use API requests
+        try:
+            # Prepare base request data
+            data = self._format_chat_request(user_prompt, system_prompt, temperature)
+
+            # Add provider-specific parameters
+            if self.model_type in ['ARGO', 'ARGO_DEV']:
+                argo_username = settings.secrets.get("argo_username")
+                if argo_username:
+                    data.update({
+                        "user": argo_username.get_secret_value(),
+                        "stop": [],
+                        "top_p": 0.9
+                    })
+
+            # Handle OpenAI-style APIs
+            if self.model_type in ['OPENAI', 'ALCF']:
+                return self._handle_openai_request(data)
+
+            # Handle other API-based models
+            return self._handle_api_model_request(data)
+
+        except Exception as e:
+            return self._handle_api_error(e)
 
     # Error Handling Methods
     # -----------------------------------------------------------------------
     def _get_error_threshold(self) -> int:
         """Get error threshold based on number of worker threads"""
-        try:
-            # n+1 where n is number of threads, default to n=4 if not set
-            workers = (
-                self.parallel_workers
-                if self.parallel_workers is not None
-                else getattr(config, 'parallel_workers', 4)
-            )
-            return workers + 1
-        except AttributeError:
-            return 5  # reasonable default if parallel_workers not set
+        # n+1 where n is number of threads, default to n=4 if not set
+        workers = self.parallel_workers or 4
+        return workers + 1
 
     def _reset_api_error_count(self):
         """Reset error count after successful API call."""
@@ -359,61 +251,56 @@ class Model:
         with self._error_count_lock:
             if self.model_type not in self._api_error_counts:
                 return True  # Non-tracked model types exit immediately
-            
+
             self._api_error_counts[self.model_type] += 1
             threshold = self._get_error_threshold()
             current = self._api_error_counts[self.model_type]
             logger.debug(f"Error count for {self.model_type}: {current}/{threshold}")
             return current >= threshold
 
-    def _handle_api_error(self, error: Exception, context: str = "") -> str:
+    def _handle_api_error(self, error: Exception) -> str:
         """Thread-safe handling of API errors."""
         error_str = str(error)
         with error_lock:
-            if not config.shutdown_event.is_set():
-                # Auth failures always exit immediately
-                if "401" in error_str or "Unauthorized" in error_str:
-                    logger.error(f"{self.model_type} authentication failed: {error_str[:80]}...")
-                    initiate_shutdown("Model API Authentication failed. Exiting.")
-                # For API errors (4xx), only show error and exit if we hit threshold
-                elif "404" in error_str or any(str(code) in error_str for code in range(400, 500)):
-                    if self._increment_api_error_count():
-                        logger.error(f"{self.model_type} API error threshold reached: {error_str[:80]}...")
-                        initiate_shutdown(f"{self.model_type} API errors exceeded threshold. Exiting.")
-                else:
-                    # Non-API errors still get warned
-                    logger.info(f"{self.model_type} request error: {error_str[:80]}...")
+            # Auth failures always exit immediately
+            if "401" in error_str or "Unauthorized" in error_str:
+                logger.error(f"{self.model_type} authentication failed: {error_str[:80]}...")
+                raise ValueError(f"Authentication failed for {self.model_type}")
+
+            # For API errors (4xx), track and possibly exit
+            if "404" in error_str or any(str(code) in error_str for code in range(400, 500)):
+                if self._increment_api_error_count():
+                    logger.error(f"{self.model_type} API error threshold reached: {error_str[:80]}...")
+                    raise ValueError(f"{self.model_type} API errors exceeded threshold")
+            else:
+                # Non-API errors get warned
+                logger.warning(f"{self.model_type} request error: {error_str[:80]}...")
+
         return ""
 
     # API Request Helpers
     # -----------------------------------------------------------------------
     def _create_http_session(self) -> requests.Session:
         """Create an HTTP session with configured retry and timeout settings."""
-        if config.shutdown_event.is_set():
-            return None
-            
         session = requests.Session()
         adapter = requests.adapters.HTTPAdapter(
-            max_retries=config.http_client.get("max_retries", 1),
-            pool_connections=config.http_client.get("pool_connections", 1),
-            pool_maxsize=config.http_client.get("pool_maxsize", 1)
+            max_retries=settings.http_client.max_retries,
+            pool_connections=settings.http_client.pool_connections,
+            pool_maxsize=settings.http_client.pool_maxsize
         )
         session.mount('http://', adapter)
         session.mount('https://', adapter)
         return session
 
-    def _make_api_request(self, url: str, data: dict) -> requests.Response:
+    def _make_api_request(self, url: str, data: dict) -> Optional[requests.Response]:
         """Make an API request with proper error handling and timeout settings."""
-        if config.shutdown_event.is_set():
-            return None
-
         session = self._create_http_session()
         if not session:
             return None
 
-        connect_timeout = config.http_client.get("connect_timeout", 3.05)
-        read_timeout = config.http_client.get("read_timeout", 10)
-        
+        connect_timeout = settings.http_client.connect_timeout
+        read_timeout = settings.http_client.read_timeout
+
         try:
             resp = session.post(
                 url,
@@ -422,7 +309,8 @@ class Model:
                 timeout=(connect_timeout, read_timeout)
             )
             if resp.status_code >= 400 and resp.status_code < 500:
-                return self._handle_api_error(Exception(f"Error code: {resp.status_code} - {resp.text}"))
+                self._handle_api_error(Exception(f"Error code: {resp.status_code} - {resp.text}"))
+                return None
             resp.raise_for_status()
             self._reset_api_error_count()  # Success! Reset error count
             return resp
@@ -466,26 +354,20 @@ class Model:
             except Exception as parse_error:
                 logger.warning(f"Failed to parse JSON from Argo response: {parse_error}")
         return response_text
-
-    def _handle_api_model_request(self, user_prompt: str, system_prompt: str, temperature: float, extra_data: dict = None) -> str:
-        """Common handler for API-based models (vLLM, Argo, CAFE)"""
-        data = self._format_chat_request(user_prompt, system_prompt, temperature)
-        if extra_data:
-            data.update(extra_data)
-        
+    def _handle_api_model_request(self, data: dict) -> str:
+        """Common handler for API-based models."""
         resp = self._make_api_request(self._normalize_url(self.endpoint), data)
         if resp is None:
             return ""
-            
+
         try:
             return self._extract_response_content(resp.json())
         except Exception as e:
             return self._handle_api_error(e)
 
-    def _handle_openai_request(self, user_prompt: str, system_prompt: str, temperature: float) -> str:
-        """Common handler for OpenAI-compatible APIs (OpenAI, ALCF)"""
+    def _handle_openai_request(self, data: dict) -> str:
+        """Common handler for OpenAI-compatible APIs."""
         try:
-            params = self._format_chat_request(user_prompt, system_prompt, temperature)
             client = OpenAI(
                 api_key=self.key,
                 base_url=self.endpoint,
@@ -493,8 +375,8 @@ class Model:
                 max_retries=1
             )
             try:
-                response = client.chat.completions.create(**params)
-                self._reset_api_error_count()  # Success! Reset error count
+                response = client.chat.completions.create(**data)
+                self._reset_api_error_count()
                 return response.choices[0].message.content.strip()
             except (Timeout, APITimeoutError) as e:
                 return self._handle_api_error(e)
@@ -523,3 +405,4 @@ def run_hf_model(input_text, base_model, tokenizer):
     )
     generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
     return generated_text
+

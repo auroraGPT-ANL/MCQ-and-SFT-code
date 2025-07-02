@@ -1,0 +1,176 @@
+name: augpt_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # ─────────── base Python deps ───────────
+  - python=3.11.9
+  - pip=25.0
+  - setuptools=75.8.0
+  - wheel=0.45.1
+  - openssl=3.0.15
+  - ca-certificates
+  - libffi=3.4.4
+  - ncurses=6.4
+  - readline=8.2
+  - sqlite=3.45.3
+  - tk=8.6.14
+  - xz=5.4.6
+  - zlib=1.2.13
+  - tzdata=2025a=h04d1e81_0
+  - jq
+  - bzip2=1.0.8
+
+  # ───────── ROCm stack is provided via container ─────────
+  # (do not install pytorch/torchvision here — those come from the container)
+
+  # ────────────── install everything else via pip ──────────────
+  - pip:
+      # core stack (fixed versions for trl 0.7.4 compatibility)
+      - transformers==4.31.0
+      - trl==0.7.4
+      - peft==0.5.0
+      - accelerate==0.23.0
+      - datasets
+      - huggingface_hub
+
+      # extra runtime + ML deps
+      - annotated-types==0.7.0
+      - anyio==4.8.0
+      - blis==1.2.0
+      - catalogue==2.0.10
+      - certifi==2024.12.14
+      - cffi==1.17.1
+      - charset-normalizer==3.4.1
+      - click==8.1.8
+      - cloudpathlib==0.20.0
+      - confection==0.1.5
+      - cryptography==44.0.0
+      - cymem==2.0.11
+      - distro==1.9.0
+      - globus-sdk==3.50.0
+      - h11==0.14.0
+      - httpcore==1.0.7
+      - httpx==0.28.1
+      - idna==3.10
+      - jinja2==3.1.5
+      - jiter==0.8.2
+      - langcodes==3.5.0
+      - language-data==1.3.0
+      - marisa-trie==1.2.1
+      - markdown-it-py==3.0.0
+      - markupsafe==3.0.2
+      - mdurl==0.1.2
+      - murmurhash==1.0.12
+      - numpy==2.2.2
+      - openai>=1.68.2,<2.0.0  # Updated to match langchain-openai requirements
+      - packaging==24.2
+      - pdfminer==20191125
+      - pdfminer-six==20240706
+      - preshed==3.0.9
+      - pycparser==2.22
+      - pycryptodome==3.21.0
+      - pydantic==2.10.6
+      - pydantic-core==2.27.2
+      - pygments==2.19.1
+      - pyjwt==2.10.1
+      - pypdf2==3.0.1
+      - pyyaml==6.0.2
+      - requests==2.32.3
+      - rich==13.9.4
+      - shellingham==1.5.4
+      - smart-open==7.1.0
+      - sniffio==1.3.1
+      - spacy==3.8.4
+      - spacy-legacy==3.0.12
+      - spacy-loggers==1.0.5
+      - https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0.tar.gz
+      - srsly==2.5.1
+      - thinc==8.3.4
+      - tqdm==4.67.1
+      - typer==0.15.1
+      - typing-extensions==4.12.2
+      - urllib3==2.3.0
+      - wasabi==1.1.3
+      - weasel==0.4.1
+      - wrapt==1.17.2
+
+      # ROCm-compatible quantizer (optional but useful)
+      - auto-gptq>=0.6.0
+      - scipy
+
+      # ───── additional deps from environment.yml ─────
+      - bitsandbytes
+      - aiohappyeyeballs==2.6.1
+      - aiohttp==3.11.18
+      - aiosignal==1.3.2
+      - attrs==25.3.0
+      - banks==2.1.2
+      - beautifulsoup4==4.13.4
+      - dataclasses-json==0.6.7
+      - Deprecated==1.2.18
+      - dill==0.3.8
+      - dirtyjson==1.0.8
+      - filelock==3.18.0
+      - filetype==1.2.0
+      - frozenlist==1.6.0
+      - fsspec==2025.3.0
+      - greenlet==3.2.1
+      - griffe==1.7.3
+      - interegular==0.3.3
+      - joblib==1.5.0
+      - jsonpatch==1.33
+      - jsonpointer==3.0.0
+      - langchain==0.3.25
+      - langchain-core==0.3.58
+      - langchain-openai==0.3.16
+      - langchain-text-splitters==0.3.8
+      - langsmith==0.3.42
+      - llama-cloud==0.1.19
+      - llama-cloud-services==0.6.21
+      - llama-index==0.12.34
+      - llama-index-agent-openai==0.4.7
+      - llama-index-cli==0.4.1
+      - llama-index-core==0.12.34.post1
+      - llama-index-embeddings-openai==0.3.1
+      - llama-index-indices-managed-llama-cloud==0.6.11
+      - llama-index-llms-openai==0.3.38
+      - llama-index-multi-modal-llms-openai==0.4.3
+      - llama-index-program-openai==0.3.1
+      - llama-index-question-gen-openai==0.3.0
+      - llama-index-readers-file==0.4.7
+      - llama-index-readers-llama-parse==0.4.0
+      - llama-parse==0.6.21
+      - lm-format-enforcer==0.10.11
+      - marshmallow==3.26.1
+      - mpmath==1.3.0
+      - multidict==6.4.3
+      - multiprocess==0.70.16
+      - mypy-extensions==1.1.0
+      - nest-asyncio==1.6.0
+      - networkx==3.4.2
+      - nltk==3.9.1
+      - orjson==3.10.18
+      - pandas==2.2.3
+      - platformdirs==4.3.7
+      - propcache==0.3.1
+      - protobuf==6.30.2
+      - psutil==7.0.0
+      - pyarrow==20.0.0
+      - python-dateutil==2.9.0.post0
+      - python-dotenv==1.1.0
+      - pytz==2025.2
+      - regex==2024.11.6
+      - requests-toolbelt==1.0.0
+      - safetensors==0.5.3
+      - sentencepiece==0.2.0
+      - six==1.17.0
+      - SQLAlchemy==2.0.40
+      - striprtf==0.0.26
+      - sympy==1.14.0
+      - tenacity==9.1.2
+      - tiktoken==0.9.0
+      - typing-inspect==0.9.0
+      - xxhash==3.5.0
+      - yarl==1.20.0
+      - zstandard==0.23.0

@@ -28,12 +28,17 @@ import re
 import threading
 import time
 import spacy
+import re
 from tqdm import tqdm
 from concurrent.futures import TimeoutError
-from common import config
+from common.loader import load_settings
+from common import config  # Keep for backward compatibility
 
-# Global constant
-CHUNK_SIZE = config.chunkSize
+# Initialize settings
+settings = load_settings()
+
+# Global constant - use settings but fall back to config for backward compatibility
+CHUNK_SIZE = settings.quality.chunkSize if hasattr(settings, 'quality') else config.chunkSize
 
 # Initialize spaCy model once.
 nlp = spacy.load("en_core_web_sm")
@@ -67,8 +72,8 @@ def load_file_lines(filepath: str) -> list:
 
 import os
 import json
-from common import config
-CHUNK_SIZE = config.chunkSize
+# Use the already imported settings
+# CHUNK_SIZE already defined above
 
 def estimate_chunk_count(input_dir: str, files: list[str], *_ignore) -> int:
     """
@@ -135,7 +140,7 @@ def count_chunks_in_file(filepath: str, chunk_size: int = CHUNK_SIZE) -> int:
             except json.JSONDecodeError:
                 continue
     except Exception as e:
-        config.logger.error(f"Failed to count chunks in file {filepath}: {e}")
+        config.logger.error(f"Failed to count chunks in file {filepath}: {e}")  # Keep using config.logger for compatibility
     return total_chunks
 
 
@@ -221,7 +226,8 @@ TEXT TO FIX:
 
 
 def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
-                  pbar_total, pbar_success, shared_counters, counter_lock):
+                  pbar_total, pbar_success, shared_counters, counter_lock, 
+                  num_answers: int = 4):
     """
     Process a single chunk in three sequential steps:
       1. Summarize & expand the chunk.
@@ -238,8 +244,12 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
 
     # Step 1: Summarize & Expand.
     try:
-        step1_msg = config.user_message.format(chunk=chunk)
-        step1_output = model.run(user_prompt=step1_msg, system_prompt=config.system_message)
+        # Get prompts from settings if available, otherwise fall back to config
+        user_message = settings.prompts.get("user_message_1") if hasattr(settings, "prompts") else config.user_message
+        system_message = settings.prompts.get("system_message_1") if hasattr(settings, "prompts") else config.system_message
+
+        step1_msg = user_message.format(chunk=chunk)
+        step1_output = model.run(user_prompt=step1_msg, system_prompt=system_message)
         if config.shutdown_event.is_set():  # Check after model.run
             return (filename, linenum, chunknum, None, False)
         augmented_chunk = step1_output
@@ -262,10 +272,19 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
 
     # Step 2: Generate the MCQ.
     try:
-        step2_msg = config.user_message_2.format(augmented_chunk=augmented_chunk)
-        generated_question = model.run(user_prompt=step2_msg, system_prompt=config.system_message_2)
+        # Get prompts from settings if available, otherwise fall back to config
+        user_message_2 = settings.prompts.get("user_message_mcq_2") if hasattr(settings, "prompts") else config.user_message_2
+        system_message_2 = settings.prompts.get("system_message_mcq_2") if hasattr(settings, "prompts") else config.system_message_2
+
+        # Format prompts with num_answers parameter
+        system_msg_2 = system_message_2.format(num_answers=num_answers)
+        step2_msg = user_message_2.format(augmented_chunk=augmented_chunk, num_answers=num_answers)
+        generated_question = model.run(user_prompt=step2_msg, system_prompt=system_msg_2)
         if config.shutdown_event.is_set():  # Check after model.run
             return (filename, linenum, chunknum, None, False)
+        # find the correct answer with the '(*)' marker
+        m = re.search(r'^\s*(\d+)\)[^\n]*\(\*\)', generated_question, flags=re.M)
+        correct_choice = m.group(1) if m else ""
     except Exception as e:
         if config.shutdown_event.is_set():
             config.logger.info("Shutdown in progress; suppressing error details.")
@@ -277,23 +296,56 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
 
     # Step 3: Verify and Score the MCQ.
     try:
-        step3_msg = config.user_message_3.format(
+        # Get prompts from settings if available, otherwise fall back to config
+        user_message_3 = settings.prompts.get("user_message_mcq_3") if hasattr(settings, "prompts") else config.user_message_3
+        system_message_3 = settings.prompts.get("system_message_mcq_3") if hasattr(settings, "prompts") else config.system_message_3
+
+        # Extract choices from the generated_question
+        # The question typically contains the full text with question followed by numbered choices
+        # We need to extract just the choices part
+        question_parts = generated_question.split("\n")
+        generated_choices = ""
+        collecting_choices = False
+        
+        for line in question_parts:
+            # Start collecting when we see a line starting with a number (like "1." or "1)")
+            if re.match(r'^\d+[\.\)]', line.strip()):
+                collecting_choices = True
+            
+            if collecting_choices:
+                generated_choices += line + "\n"
+        
+        # If we couldn't extract choices, use the whole question as a fallback
+        if not generated_choices:
+            generated_choices = generated_question
+            
+        step3_msg = user_message_3.format(
             augmented_chunk=augmented_chunk,
-            generated_question=generated_question
+            generated_question=generated_question,
+            generated_choices=generated_choices
         )
-        step3_output = model.run(user_prompt=step3_msg, system_prompt=config.system_message_3)
+        step3_output = model.run(user_prompt=step3_msg, system_prompt=system_message_3)
         if config.shutdown_event.is_set():  # Check after model.run
             return (filename, linenum, chunknum, None, False)
-        if step3_output is None:
-            raise ValueError("model.run() returned None for step3_output.")
-        step3_clean = step3_output.replace("```json", "").replace("```", "").strip()
-        parsed_json = robust_parse_json_output(step3_clean, model)
-        model_answer = str(parsed_json.get("answer", "")).strip()
+            
+        # Check for None or empty responses from the model
+        if step3_output is None or (isinstance(step3_output, str) and not step3_output.strip()):
+            config.logger.warning(f"Empty response from model for chunk {chunknum} in file {filename}. This may be due to a timeout or API error.")
+            # Default to a low score instead of raising an error
+            parsed_json = {"answer": "", "score": 0, "comment": "No response from model"}
+        else:
+            # Process normally when we have a response
+            step3_clean = step3_output.replace("```json", "").replace("```", "").strip()
+            parsed_json = robust_parse_json_output(step3_clean, model)
+        #model_answer = str(parsed_json.get("answer", "")).strip()
         model_score = parsed_json.get("score", 0)
         pbar_total.set_postfix_str(f"Score: {model_score}")
 
-        if isinstance(model_score, int) and model_score > config.minScore:
-            config.logger.info(f"MCQ generated for chunk {chunknum} in file {filename}, score {model_score} > {config.minScore}.")
+        # Get minScore from settings if available, otherwise fall back to config
+        min_score = settings.quality.minScore if hasattr(settings, "quality") else config.minScore
+
+        if isinstance(model_score, int) and model_score > min_score:
+            config.logger.info(f"MCQ generated for chunk {chunknum} in file {filename}, score {model_score} > {min_score}.")
             qa_pair = {
                 "file": filename,
                 "path": file_path,
@@ -301,7 +353,7 @@ def process_chunk(model, filename, file_path, linenum, chunknum, chunk,
                 "chunk": chunknum,
                 "model": model.model_name,
                 "question": generated_question,
-                "answer": model_answer,
+                "answer": correct_choice,
                 "text": augmented_chunk
             }
             chunk_success = True
@@ -349,41 +401,47 @@ def merge_mcq_output(out_file: str, new_qa_pairs: list) -> list:
     return existing_mcqs
 
 
-def process_directory(model, input_dir: str, output_dir: str = "output_files",
-                      use_progress_bar: bool = True, parallel_workers: int = 4, force: bool = False):
+def process_directory(
+    model,
+    input_dir: str,
+    output_dir: str = "output_files",
+    use_progress_bar: bool = True,
+    parallel_workers: int = 4,
+    force: bool = False,
+    num_answers: int = 4,
+):
     """
     Process all JSON/JSONL files in input_dir by scheduling each text chunk
     as a separate task. If output files already exist and force is False,
-    those files are skipped.
+    those chunks are counted as successes rather than reprocessed.
     Writes MCQs to output_dir in JSONL format.
     """
     config.logger.info(f"Run with {parallel_workers} threads.")
 
     # Gather list of files.
-    json_files  = [f for f in os.listdir(input_dir) if f.lower().endswith(".json")]
+    json_files = [f for f in os.listdir(input_dir) if f.lower().endswith(".json")]
     jsonl_files = [f for f in os.listdir(input_dir) if f.lower().endswith(".jsonl")]
     all_files = json_files + jsonl_files
     total_files = len(all_files)
-
     if total_files == 0:
         config.logger.warning(f"No JSON files found in {input_dir}.")
         return
 
     overall_start_time = time.time()
 
-    # Compute approximate chunk count using size heuristic
+    # Compute approximate chunk count using heuristic
     if json_files:
         approximate_chunk_count = estimate_chunk_count(input_dir, all_files)
         config.logger.info(f"{total_files} JSON files, ~{approximate_chunk_count} chunks\n")
     else:
-        # fallback for .jsonl
         approximate_chunk_count = sum(
             1 for _ in open(os.path.join(input_dir, jsonl_files[0]), 'r', encoding='utf-8')
         )
 
     counter_lock = threading.Lock()
     shared_counters = {"success": 0, "failure": 0}
-    file_results = {}
+    file_results: dict[str, list] = {}
+    processed_chunks: dict[str, set[tuple[int,int]]] = {}
 
     if use_progress_bar:
         pbar_total = tqdm(total=approximate_chunk_count, desc=" Processed", position=0, unit="chunk")
@@ -392,66 +450,82 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
         pbar_total = config.NoOpTqdm()
         pbar_success = config.NoOpTqdm()
 
-    futures = []
-    from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=parallel_workers) as executor:
+    # ------------------------------------------------------------------------
+    # Parallel execution with clean interrupt handling
+    # ------------------------------------------------------------------------
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError
+
+    executor = ThreadPoolExecutor(max_workers=parallel_workers)
+    try:
+        futures = []
+
+        # 1) Submit tasks
         for filename in all_files:
-            processed_file = os.path.join(output_dir, f'processed_{os.path.splitext(filename)[0]}.jsonl')
+            # If already processed and not forcing, skip
+            processed_file = os.path.join(output_dir, f"processed_{os.path.splitext(filename)[0]}.jsonl")
             file_path = os.path.join(input_dir, filename)
             if os.path.exists(processed_file) and not force:
                 if config.shutdown_event.is_set():
-                    #config.logger.info("Shutdown in progress; suppressing error details.")
                     return
                 num_chunks = count_chunks_in_file(file_path, CHUNK_SIZE)
-                config.logger.info(f"Skipping {filename}: {num_chunks} existing chunks counted as successful")
+                config.logger.info(f"Skipping {filename}: {num_chunks} existing chunks")
                 pbar_total.update(num_chunks)
                 pbar_success.update(num_chunks)
                 with counter_lock:
                     shared_counters["success"] += num_chunks
                 continue
 
+            # Read file lines
             try:
                 lines = load_file_lines(file_path)
             except Exception as e:
                 if config.shutdown_event.is_set():
-                    config.logger.info("Shutdown in progress; suppressing error details.")
                     return
-                else:
-                    config.logger.error(f"Failed to read file {filename}: {e}")
-                    continue
+                config.logger.error(f"Failed to read file {filename}: {e}")
+                continue
 
+            # Break into chunks and submit
             for linenum, line in enumerate(lines, start=1):
                 if config.shutdown_event.is_set():
-                    #config.logger.info("Shutdown in progress: stopping new tasks (file loop).")
                     break
                 try:
                     record = json.loads(line.strip())
                 except json.JSONDecodeError as e:
-                    config.logger.info(f"JSON decode error in file {filename} line {linenum}: {e}")
+                    config.logger.info(f"JSON decode error in {filename} line {linenum}: {e}")
                     continue
-                text = record.get('text')
-                rec_path = record.get('path', file_path)
+                text = record.get("text", "")
+                rec_path = record.get("path", file_path)
                 if not text:
                     continue
                 chunks = split_text_into_chunks(text, CHUNK_SIZE)
+
                 for chunknum, chunk in enumerate(chunks, start=1):
                     if config.shutdown_event.is_set():
-                        config.logger.info("Shutdown in progress: stopping new tasks (chunk loop).")
                         break
-                    # Only submit new task if shutdown hasn't been triggered
-                    futures.append(executor.submit(process_chunk, model, filename, rec_path,
-                                                    linenum, chunknum, chunk,
-                                                    pbar_total, pbar_success,
-                                                    shared_counters, counter_lock))
-                    # Check immediately after submitting if shutdown was triggered
+                    futures.append(
+                        executor.submit(
+                            process_chunk,
+                            model,
+                            filename,
+                            rec_path,
+                            linenum,
+                            chunknum,
+                            chunk,
+                            pbar_total,
+                            pbar_success,
+                            shared_counters,
+                            counter_lock,
+                            num_answers,
+                        )
+                    )
                     if config.shutdown_event.is_set():
-                        config.logger.info("Shutdown triggered: stopping further task submission.")
                         break
-        processed_chunks = {}  # filename -> set of (linenum, chunknum)
-        for future in futures:
+
+        # 2) Collect results
+        for fut in futures:
             try:
-                fname, linenum, chunknum, qa_pair, success = future.result(timeout=75)
-                if qa_pair is not None:
+                fname, linenum, chunknum, qa_pair, success = fut.result(timeout=settings.timeout)
+                if qa_pair:
                     chunk_id = (linenum, chunknum)
                     if fname not in processed_chunks:
                         processed_chunks[fname] = set()
@@ -459,14 +533,20 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
                         file_results.setdefault(fname, []).append(qa_pair)
                         processed_chunks[fname].add(chunk_id)
             except TimeoutError:
-                config.logger.info("Chunk processing task timed out after 75s")
+                config.logger.info("Chunk processing task timed out")
             except Exception as e:
                 if config.shutdown_event.is_set():
-                    config.logger.warning("Shutdown in progress; suppressing error details.")
                     return
-                else:
-                    config.logger.error(f"Error processing a chunk: {e}")
+                config.logger.error(f"Error processing a chunk: {e}")
 
+    except KeyboardInterrupt:
+        config.logger.warning("Interrupt received – cancelling pending tasks…")
+        executor.shutdown(wait=False, cancel_futures=True)
+        sys.exit(1)
+    else:
+        executor.shutdown()
+
+    # Finalize progress bars
     if use_progress_bar:
         remaining = pbar_total.total - pbar_total.n
         if remaining > 0:
@@ -474,11 +554,11 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
         pbar_total.close()
         pbar_success.close()
 
-    # Write out MCQs for each file.
+    # Write out MCQs for each file
     os.makedirs(output_dir, exist_ok=True)
     for fname, qa_pairs in file_results.items():
         base = os.path.splitext(fname)[0]
-        out_file = os.path.join(output_dir, f'processed_{base}.jsonl')
+        out_file = os.path.join(output_dir, f"processed_{base}.jsonl")
         try:
             if force:
                 with config.output_file_lock:
@@ -496,20 +576,18 @@ def process_directory(model, input_dir: str, output_dir: str = "output_files",
             config.logger.info(f"Wrote {len(qa_pairs)} MCQs to {out_file} ({new_count} new)")
         except Exception as e:
             if config.shutdown_event.is_set():
-                config.logger.info("Shutdown in progress; suppressing error details.")
                 return
-            else:
-                config.logger.error(f"Failed to write output file {out_file}: {e}")
+            config.logger.error(f"Failed to write output file {out_file}: {e}")
 
+    # Cleanup and summary
     file_results.clear()
-    overall_end_time = time.time()
-    total_time = overall_end_time - overall_start_time
+    end_time = time.time()
+    elapsed = end_time - overall_start_time
     if config.shutdown_event.is_set():
-        config.logger.warning("Process terminated")
+        config.logger.warning("Process terminated by interrupt")
     else:
         config.logger.info(
-            f"Processed {total_files} files in {human_readable_time(total_time)}.\n"
-            f"      Chunks processed:: {shared_counters}\n"
-            f"      MCQs saved to {output_dir}."
+            f"Processed {total_files} files in {human_readable_time(elapsed)}. "
+            f"Chunks: {shared_counters}"
         )
 
