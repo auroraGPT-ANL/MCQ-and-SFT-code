@@ -15,7 +15,28 @@ This repository provides Python programs for creating training data to fine-tune
 2. Use an AI model to extract Knowledge Nuggets from each paper. Each paper is split into n-token *chunks*, and the will extract knowledge nuggets from each.
 3. Test each nugget using a model to be fine-tuned, eliminating nuggets that are already known to the model. This will create a set of *New* Knowledge Nuggets (NKNs) for fine-tuning the target model.
 
-The current system operates from the command line, where each component of the workflow can be run as a stand-alone tool or as part of the main workflow orchestrator.
+Finally, this repo contains a work-in-progress, exploratory project to use the components from these two workflows as part of an **agentic systems**.
+
+The repository is thus organized as follows:
+
+1. Stable MCQ workflow in *legacy/scripts* uses components in *src* including:
+* *src/common* - tools common to both the MCQ and Nugget workflows, including model access, configuration, etc., 
+* *src/mcq\_workflow* - tools specific to generating, answering, and scoring MCQs, 
+* *src/nugget\_workflow* - tools specific to extracting knowledge nuggets and screening for those not already know by a target model,
+* *src/test* - test routines including a stub model for testing workflows quickly without model delays (including offline testing), and
+* *src/tune\_workflow* - tools to take MCQs (and eventually NKNs) to fine-tune a model. (also under construction, thus not yet included in either workflow)
+
+All of the components in *src/common* *src/mcq\_workflow* and *src/nugget\_workflow* work both as Python
+modules (called form the CLI) and as part of an exploratory agent-based system, where each pipeline component is a
+subclass of *agent\_base.Agent* which enforces a python contract of the form:
+```
+def run(context: dict) -> dict 
+```
+Each component of the pipeline performs its specific set of tasks and returns its results to a shared *context* A light-weight *orchestrator.py* imports and runs the agents.
+
+The remainder of this README is currently specific to the CLI (legacy, stable) MCQ workflow.
+
+**Contact:** Please email {foster|stevens|catlett}@anl.gov if you see things that are unclear or missing.
 
 ### MCQ Workflow Overview
 
